@@ -3,12 +3,12 @@ import { createPinia } from 'pinia'
 import { PiniaColada } from '@pinia/colada'
 import ui from '@nuxt/ui/vue-plugin'
 import { addCollection } from '@iconify/vue'
-import lucide from '@iconify-json/lucide/icons.json'
+import lucide from 'virtual:lucide-subset'
 import App from './App.vue'
 import { installBridge } from './bridge'
 import './assets/css/main.css'
 
-// Bundle the icon set instead of letting it be fetched.
+// Bundle the icons instead of letting them be fetched.
 //
 // Nuxt UI's icons are Iconify names (`i-lucide-clock`), and outside a Nuxt build
 // `@iconify/vue` resolves an unknown name by calling api.iconify.design at
@@ -17,11 +17,9 @@ import './assets/css/main.css'
 // silently rendered blank in the packaged build, and even with the CSP opened it
 // would make a local desktop app's chrome depend on an internet round trip.
 //
-// The whole collection is registered rather than the ~45 names this app writes
-// itself: Nuxt UI's own components pull icons from their theme defaults
-// (a select's chevron, a modal's close button), so a hand-maintained subset
-// would go stale as a silently missing glyph. The cost is a few hundred KB in a
-// bundle that is read from local disk.
+// `virtual:lucide-subset` holds only the icons this app can actually render,
+// found by scanning the source *and* Nuxt UI's compiled theme at build time —
+// see the plugin in `vite.config.ts` for why that scan is not a checked-in list.
 addCollection(lucide)
 
 // Before anything renders: the onboarding gate in `App.vue` calls

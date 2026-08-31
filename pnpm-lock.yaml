@@ -24,6 +24,9 @@ importers:
       '@iconify-json/lucide':
         specifier: ^1.2.127
         version: 1.2.127
+      '@iconify/utils':
+        specifier: ^3.1.4
+        version: 3.1.4
       '@internationalized/date':
         specifier: ^3.12.2
         version: 3.12.3

@@ -4,7 +4,10 @@
 # time anyone edits from the other platform.
 * text=auto eol=lf
 
-# Binary assets: never touched.
+# Binary assets: never touched. `text=auto` above would otherwise be free to
+# guess, and a webfont that gets line-ending "normalized" on checkout is a
+# corrupt font — one that fails silently as a fallback face.
 *.png binary
 *.ico binary
 *.icns binary
+*.woff2 binary
