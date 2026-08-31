@@ -18,7 +18,11 @@ import {
   useUpdateTimeEntry
 } from '@renderer/composables/queries/time-entries'
 import type { TimeEntryDraft } from '@renderer/utils/time-entry-draft'
-import { HOURS_MIN, clampEntryHours } from '@renderer/utils/entry-hours'
+import {
+  HOURS_MIN,
+  clampEntryHours,
+  normalizeSliderHours
+} from '@renderer/utils/entry-hours'
 
 /**
  * The time-entry form, rendered in the day modal's top section. One component
@@ -292,16 +296,30 @@ function setHours(value: number): void {
 
 /**
  * What the slider binds to. The getter pins an over-cap entry to the end of the
- * track without rewriting its hours; the setter routes through `setHours`.
+ * track without rewriting its hours; the setter narrows what the slider emitted
+ * and routes through `setHours`.
  *
  * A typed computed with `v-model`, not an inline `@update:model-value` lambda:
  * `components.d.ts` is generated and gitignored, so on a fresh clone (every CI
  * run) `USlider` has no resolved type and such a lambda's parameter would be an
  * implicit `any` — a type error that appears only in CI.
+ *
+ * The setter takes `unknown` on purpose. `USlider` is a range control
+ * underneath, so it can hand over a one-element array rather than a number, and
+ * the previous `set: setHours` let that land in `state.hours` unchecked: the
+ * field rendered `[ 6 ]h` and the `z.number()` rule reported "Enter the hours
+ * worked." for a value that was plainly set. Declaring the computed `<number>`
+ * did nothing about it — that annotation is gone at runtime. Hence
+ * `normalizeSliderHours`, which is where the check lives and is tested.
  */
-const sliderHours = computed<number>({
+const sliderHours = computed<number, unknown>({
   get: () => Math.min(state.value.hours, MAX_HOURS),
-  set: setHours
+  set: (value) => {
+    const hours = normalizeSliderHours(value)
+    // Nonsense is ignored rather than coerced: logging an hour nobody chose is
+    // worse than a slider that appears not to have moved.
+    if (hours !== null) setHours(hours)
+  }
 })
 
 /**

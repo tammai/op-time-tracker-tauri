@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 
 import {
   HOURS_MIN,
-  clampEntryHours
+  clampEntryHours,
+  normalizeSliderHours
 } from '@renderer/utils/entry-hours'
 
 /**
@@ -37,5 +38,43 @@ describe('clampEntryHours', () => {
     // shouldn't be welded together here.
     expect(clampEntryHours(20, 24)).toBe(20)
     expect(clampEntryHours(30, 24)).toBe(24)
+  })
+})
+
+/**
+ * The regression this covers: the hours field showed `[ 6 ]h` and refused to
+ * validate, because `USlider` handed over a one-element array and the binding's
+ * `computed<number>` annotation — erased at runtime — let it through into
+ * `state.hours`, where `z.number()` rightly rejected it. The user saw "Enter the
+ * hours worked." about an hour count they had just set.
+ */
+describe('normalizeSliderHours', () => {
+  it('passes a plain number through', () => {
+    expect(normalizeSliderHours(6)).toBe(6)
+    expect(normalizeSliderHours(0.25)).toBe(0.25)
+    // Zero is a real slider position; the range rules, not this, reject it.
+    expect(normalizeSliderHours(0)).toBe(0)
+  })
+
+  it('unwraps the single-thumb array the slider actually emits', () => {
+    expect(normalizeSliderHours([6])).toBe(6)
+    expect(normalizeSliderHours([0.25])).toBe(0.25)
+  })
+
+  it('rejects a multi-thumb array rather than guessing which thumb', () => {
+    // Two values are not this field's value — picking one would silently log
+    // whichever end happened to come first.
+    expect(normalizeSliderHours([1, 6])).toBeNull()
+    expect(normalizeSliderHours([])).toBeNull()
+  })
+
+  it('rejects anything that is not a finite number', () => {
+    expect(normalizeSliderHours(undefined)).toBeNull()
+    expect(normalizeSliderHours(null)).toBeNull()
+    expect(normalizeSliderHours('6')).toBeNull()
+    expect(normalizeSliderHours(['6'])).toBeNull()
+    expect(normalizeSliderHours(NaN)).toBeNull()
+    expect(normalizeSliderHours(Infinity)).toBeNull()
+    expect(normalizeSliderHours({ value: 6 })).toBeNull()
   })
 })
