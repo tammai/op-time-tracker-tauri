@@ -582,13 +582,7 @@ impl OpenProjectClient {
         url: url::Url,
         body: Option<Value>,
     ) -> Result<Value, AppError> {
-        // OpenProject API key auth: `Basic base64("apikey:<key>")`. The key is a
-        // secret — it exists here and nowhere else.
-        let auth = format!(
-            "Basic {}",
-            base64::engine::general_purpose::STANDARD
-                .encode(format!("apikey:{}", self.credentials.api_key))
-        );
+        let auth = self.authorization_header();
 
         let send_content_type = method != Method::GET;
         let mut request = self
@@ -647,6 +641,21 @@ impl OpenProjectClient {
         }
 
         Err(self.map_error_status(status, &text))
+    }
+
+    /// OpenProject API key auth: `Basic base64("apikey:<key>")` — the literal
+    /// username `apikey`, not the user's login.
+    ///
+    /// Its own method so the encoding is pinned by a test. A wrong header here
+    /// fails as HTTP 401 on *every* key, valid ones included, which is
+    /// indistinguishable from "your key is wrong" from inside the app — the one
+    /// bug in this file that would send every user hunting in the wrong place.
+    fn authorization_header(&self) -> String {
+        format!(
+            "Basic {}",
+            base64::engine::general_purpose::STANDARD
+                .encode(format!("apikey:{}", self.credentials.api_key))
+        )
     }
 
     /// The server-authored explanation for a failed request, if it is safe to
@@ -830,6 +839,19 @@ mod tests {
                 "HTTP {status} leaked the key"
             );
         }
+    }
+
+    #[test]
+    fn the_authorization_header_is_basic_apikey_colon_key() {
+        // Pinned against an independently computed value: base64 of
+        // "apikey:secret-key". Node's
+        // Buffer.from('apikey:secret-key').toString('base64') — the Electron
+        // app's own expression — produces the same string, which is what makes
+        // this a port check and not just a restatement of the code.
+        assert_eq!(
+            client().authorization_header(),
+            "Basic YXBpa2V5OnNlY3JldC1rZXk="
+        );
     }
 
     #[test]

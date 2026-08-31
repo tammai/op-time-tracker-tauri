@@ -46,14 +46,22 @@ pub fn validate_base_url(input: &str) -> Result<String, String> {
 
 /// The API key is opaque — OpenProject does not document a format, so the only
 /// thing worth asserting is that the user actually typed one.
+///
+/// **Trimmed**, which the Electron original did not do. An OpenProject key is a
+/// hex token with no whitespace in it, and it is *pasted* — often from a dialog
+/// that hands over a trailing newline. Sent as-is, that key authenticates as
+/// nothing and the user is told "Authentication failed. Check your API key.",
+/// which points at the wrong problem entirely. Trimming here rather than in the
+/// form because this is the boundary that builds the auth header.
 pub fn validate_api_key(input: &str) -> Result<String, String> {
     if input.is_empty() {
         return Err("API key is required.".to_string());
     }
-    if input.trim().is_empty() {
+    let trimmed = input.trim();
+    if trimmed.is_empty() {
         return Err("API key cannot be whitespace only.".to_string());
     }
-    Ok(input.to_string())
+    Ok(trimmed.to_string())
 }
 
 // Calendar dates
@@ -207,9 +215,20 @@ mod tests {
 
     #[test]
     fn api_keys_only_have_to_be_non_blank() {
-        assert!(validate_api_key("abc123").is_ok());
+        assert_eq!(validate_api_key("abc123").unwrap(), "abc123");
         assert!(validate_api_key("").is_err());
         assert!(validate_api_key("   ").is_err());
+    }
+
+    #[test]
+    fn a_pasted_api_key_is_trimmed() {
+        // The failure this prevents: a key pasted with a trailing newline
+        // authenticates as nothing, and the user reads "check your API key"
+        // about a key that is perfectly valid.
+        assert_eq!(validate_api_key("  abc123
+").unwrap(), "abc123");
+        assert_eq!(validate_api_key("	abc123
+").unwrap(), "abc123");
     }
 
     #[test]

@@ -278,6 +278,21 @@ export function useCredentialsForm(options: UseCredentialsFormOptions = {}) {
   }
 
   /**
+   * Whether the API key field is currently shown as plain text.
+   *
+   * A key is pasted, not remembered, and a paste that silently lost a character
+   * is indistinguishable from a revoked key when the field is masked — the
+   * failure reads as "Authentication failed", which sends the user hunting for
+   * the wrong problem. Off by default; reset by `reset()` so the field is never
+   * left revealed for the next opening of the settings modal.
+   */
+  const apiKeyVisible = ref(false)
+
+  function toggleApiKeyVisibility(): void {
+    apiKeyVisible.value = !apiKeyVisible.value
+  }
+
+  /**
    * Drop any typed key and result/error state, and return the URL field to
    * what's stored (or the default). Used when the settings modal closes, so
    * no entered key lingers in memory.
@@ -285,6 +300,7 @@ export function useCredentialsForm(options: UseCredentialsFormOptions = {}) {
   function reset(): void {
     state.baseUrl = storedBaseUrl.value ?? DEFAULT_OPENPROJECT_BASE_URL
     state.apiKey = ''
+    apiKeyVisible.value = false
     setTestResult(null)
     probedValues.value = null
     saveError.value = null
@@ -294,6 +310,8 @@ export function useCredentialsForm(options: UseCredentialsFormOptions = {}) {
     state,
     formSchema,
     apiKeyPlaceholder,
+    apiKeyVisible,
+    toggleApiKeyVisibility,
     hasStoredApiKey,
     testing,
     saving,

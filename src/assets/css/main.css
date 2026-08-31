@@ -31,3 +31,16 @@ body {
 .dark body {
   background-color: var(--color-neutral-950);
 }
+
+/*
+ * WebView2 draws its own reveal button inside `input[type=password]`
+ * (`::-ms-reveal`), but only while the field has focus and content — which is
+ * why the API key field looked like it had no reveal at all. The app supplies
+ * its own button instead: always visible, labelled for assistive tech, and
+ * keyboard-reachable. Hiding the native one keeps a single control rather than
+ * two eyes side by side once the field is focused.
+ */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}

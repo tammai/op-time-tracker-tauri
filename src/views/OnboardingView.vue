@@ -28,6 +28,8 @@ const {
   state,
   formSchema,
   apiKeyPlaceholder,
+  apiKeyVisible,
+  toggleApiKeyVisibility,
   hasStoredApiKey,
   testing,
   saving,
@@ -94,12 +96,31 @@ const {
             >
               <UInput
                 v-model="state.apiKey"
-                type="password"
+                :type="apiKeyVisible ? 'text' : 'password'"
                 :placeholder="apiKeyPlaceholder"
                 icon="i-lucide-key"
                 autocomplete="off"
                 class="w-full"
-              />
+              >
+                <!--
+                  A key is pasted, not typed from memory, so a paste that lost a
+                  character is otherwise only visible as "Authentication failed".
+                  `tabindex="-1"` keeps the reveal out of the tab order between
+                  the field and Test connection.
+                -->
+                <template #trailing>
+                  <UButton
+                    color="neutral"
+                    variant="link"
+                    size="sm"
+                    tabindex="-1"
+                    :icon="apiKeyVisible ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                    :aria-label="apiKeyVisible ? 'Hide API key' : 'Show API key'"
+                    :aria-pressed="apiKeyVisible"
+                    @click="toggleApiKeyVisibility"
+                  />
+                </template>
+              </UInput>
             </UFormField>
 
             <div class="flex flex-col gap-3">
