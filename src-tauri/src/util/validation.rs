@@ -225,10 +225,22 @@ mod tests {
         // The failure this prevents: a key pasted with a trailing newline
         // authenticates as nothing, and the user reads "check your API key"
         // about a key that is perfectly valid.
-        assert_eq!(validate_api_key("  abc123
-").unwrap(), "abc123");
-        assert_eq!(validate_api_key("	abc123
-").unwrap(), "abc123");
+        assert_eq!(
+            validate_api_key(
+                "  abc123
+"
+            )
+            .unwrap(),
+            "abc123"
+        );
+        assert_eq!(
+            validate_api_key(
+                "	abc123
+"
+            )
+            .unwrap(),
+            "abc123"
+        );
     }
 
     #[test]

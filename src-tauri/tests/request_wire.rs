@@ -73,7 +73,9 @@ fn serve_once(body: &'static str) -> (String, mpsc::Receiver<CapturedRequest>) {
             body.len(),
             body
         );
-        stream.write_all(response.as_bytes()).expect("write response");
+        stream
+            .write_all(response.as_bytes())
+            .expect("write response");
         stream.flush().ok();
 
         tx.send(CapturedRequest {
@@ -148,10 +150,7 @@ async fn a_key_with_punctuation_is_not_mangled_by_the_encoding() {
         .await
         .expect("the probe succeeds");
 
-    assert_eq!(
-        decoded_credential(&captured(rx)),
-        format!("apikey:{key}")
-    );
+    assert_eq!(decoded_credential(&captured(rx)), format!("apikey:{key}"));
 }
 
 #[tokio::test]
@@ -175,9 +174,8 @@ async fn a_base_url_with_a_path_prefix_keeps_it_and_still_authenticates() {
 async fn a_data_request_also_carries_the_key() {
     // The probe and the data path build their requests through the same helper,
     // but only asserting the probe would let the two drift.
-    let (base_url, rx) = serve_once(
-        r#"{"_type":"Collection","total":0,"count":0,"_embedded":{"elements":[]}}"#,
-    );
+    let (base_url, rx) =
+        serve_once(r#"{"_type":"Collection","total":0,"count":0,"_embedded":{"elements":[]}}"#);
     let key = "data-request-key";
 
     client(&base_url, key)
