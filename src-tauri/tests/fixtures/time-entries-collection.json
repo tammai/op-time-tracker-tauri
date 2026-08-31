@@ -1,0 +1,55 @@
+{
+  "_type": "Collection",
+  "total": 3,
+  "count": 3,
+  "_embedded": {
+    "elements": [
+      {
+        "id": 100,
+        "_type": "TimeEntry",
+        "hours": "PT1H30M",
+        "spentOn": "2026-01-15",
+        "createdAt": "2026-01-15T10:00:00Z",
+        "updatedAt": "2026-01-15T10:00:00Z",
+        "comment": { "format": "plain", "raw": "Fixed the login redirect" },
+        "_links": {
+          "self": { "href": "/api/v3/time_entries/100", "title": "Time entry 100" },
+          "workPackage": { "href": "/api/v3/work_packages/42", "title": "Fix login bug" },
+          "project": { "href": "/api/v3/projects/7", "title": "Backend" },
+          "user": { "href": "/api/v3/users/11", "title": "Alice" },
+          "activity": { "href": "/api/v3/activities/1", "title": "Development" }
+        }
+      },
+      {
+        "id": 101,
+        "_type": "TimeEntry",
+        "hours": "PT45M",
+        "spentOn": "2026-01-16",
+        "createdAt": "2026-01-16T11:00:00Z",
+        "updatedAt": "2026-01-16T11:00:00Z",
+        "comment": null,
+        "_links": {
+          "self": { "href": "/api/v3/time_entries/101", "title": "Time entry 101" },
+          "workPackage": { "href": "/api/v3/work_packages/42", "title": "Fix login bug" },
+          "project": { "href": "/api/v3/projects/7", "title": "Backend" },
+          "user": { "href": "/api/v3/users/11", "title": "Alice" }
+        }
+      },
+      {
+        "id": 102,
+        "_type": "TimeEntry",
+        "hours": "PT2H",
+        "spentOn": "2026-01-17",
+        "createdAt": "2026-01-17T09:00:00Z",
+        "updatedAt": "2026-01-17T09:00:00Z",
+        "comment": "paired review",
+        "_links": {
+          "self": { "href": "/api/v3/time_entries/102", "title": "Time entry 102" },
+          "workPackage": { "href": "/api/v3/work_packages/43", "title": "Unassigned feature" },
+          "project": { "href": "/api/v3/projects/7", "title": "Backend" },
+          "user": { "href": "/api/v3/users/12", "title": "Bob" }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The one window's capabilities. Deliberately minimal: the frontend reaches the OS only through this app's own commands, never through a filesystem, shell, or HTTP plugin.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

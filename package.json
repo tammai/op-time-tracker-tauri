@@ -1,0 +1,74 @@
+{
+  "name": "op-time-tracker",
+  "version": "2.0.0",
+  "private": true,
+  "description": "OpenProject Time Tracker — Tauri + Rust desktop app",
+  "type": "module",
+  "author": {
+    "name": "Tam Mai",
+    "email": "tam.mai@bigin.vn"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.7.0",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "dist:win": "tauri build --bundles nsis",
+    "dist:mac": "tauri build --bundles dmg",
+    "dev:vite": "vite",
+    "build:vite": "vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "icons": "tauri icon build/icon.png",
+    "type-check": "vue-tsc --noEmit -p tsconfig.app.json && vue-tsc --noEmit -p tsconfig.test.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "check": "pnpm type-check && pnpm test && pnpm test:rust && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings"
+  },
+  "dependencies": {
+    "@iconify/vue": "^5.0.1",
+    "@tauri-apps/api": "^2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@iconify-json/lucide": "^1.2.127",
+    "@internationalized/date": "^3.12.2",
+    "@nuxt/ui": "^4.10.0",
+    "@pinia/colada": "^1.4.2",
+    "@tauri-apps/cli": "^2",
+    "@tiptap/core": "^3",
+    "@tiptap/extension-link": "^3.30.5",
+    "@tiptap/extension-placeholder": "^3",
+    "@tiptap/markdown": "^3",
+    "@tiptap/pm": "^3",
+    "@tiptap/starter-kit": "^3",
+    "@tiptap/vue-3": "^3",
+    "@types/node": "^26.1.1",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/tsconfig": "^0.7.0",
+    "eslint": "^9.15.0",
+    "eslint-plugin-vue": "^9.32.0",
+    "globals": "^17.7.0",
+    "pinia": "^4.0.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8",
+    "vue": "^3.5.13",
+    "vue-eslint-parser": "^10.4.1",
+    "vue-tsc": "^2.1.10"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "vue-demi"
+    ]
+  }
+}

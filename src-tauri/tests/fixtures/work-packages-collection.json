@@ -1,0 +1,83 @@
+{
+  "_type": "Collection",
+  "total": 2,
+  "count": 2,
+  "_embedded": {
+    "elements": [
+      {
+        "id": 42,
+        "_type": "WorkPackage",
+        "lockVersion": 4,
+        "subject": "Fix login bug",
+        "description": {
+          "format": "markdown",
+          "raw": "Session cookie is dropped on redirect.",
+          "html": "<p class=\"op-uc-p\">Session cookie is dropped on redirect.</p>"
+        },
+        "type": "Task",
+        "status": "In Progress",
+        "startDate": "2026-01-15",
+        "dueDate": "2026-01-22",
+        "spentHours": 3.5,
+        "createdAt": "2026-01-10T09:00:00Z",
+        "updatedAt": "2026-01-18T14:30:00Z",
+        "_links": {
+          "self": {
+            "href": "/api/v3/work_packages/42",
+            "title": "Fix login bug"
+          },
+          "type": {
+            "href": "/api/v3/types/1",
+            "title": "Task"
+          },
+          "status": {
+            "href": "/api/v3/statuses/3",
+            "title": "In Progress"
+          },
+          "project": {
+            "href": "/api/v3/projects/7",
+            "title": "Backend"
+          },
+          "assignee": {
+            "href": "/api/v3/users/11",
+            "title": "Alice"
+          },
+          "priority": {
+            "href": "/api/v3/priorities/2",
+            "title": "High"
+          }
+        }
+      },
+      {
+        "id": 43,
+        "_type": "WorkPackage",
+        "lockVersion": 0,
+        "subject": "Unassigned feature",
+        "startDate": null,
+        "dueDate": null,
+        "spentHours": null,
+        "createdAt": "2026-01-11T10:00:00Z",
+        "updatedAt": "2026-01-11T10:00:00Z",
+        "_links": {
+          "self": {
+            "href": "/api/v3/work_packages/43",
+            "title": "Unassigned feature"
+          },
+          "type": {
+            "href": "/api/v3/types/2",
+            "title": "Feature"
+          },
+          "status": {
+            "href": "/api/v3/statuses/1",
+            "title": "New"
+          },
+          "project": {
+            "href": "/api/v3/projects/7",
+            "title": "Backend"
+          },
+          "assignee": {}
+        }
+      }
+    ]
+  }
+}

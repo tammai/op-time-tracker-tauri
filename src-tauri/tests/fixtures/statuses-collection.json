@@ -1,0 +1,51 @@
+{
+  "_type": "Collection",
+  "total": 3,
+  "count": 3,
+  "_embedded": {
+    "elements": [
+      {
+        "_type": "Status",
+        "id": 3,
+        "name": "In Progress",
+        "isClosed": false,
+        "color": "#3852C6",
+        "isDefault": false,
+        "isReadonly": false,
+        "position": 3,
+        "_links": {
+          "self": { "href": "/api/v3/statuses/3" }
+        }
+      },
+      {
+        "_type": "Status",
+        "id": 7,
+        "name": "To Do",
+        "isClosed": false,
+        "color": null,
+        "isDefault": true,
+        "isReadonly": false,
+        "position": 1,
+        "_links": {
+          "self": { "href": "/api/v3/statuses/7" }
+        }
+      },
+      {
+        "_type": "Status",
+        "id": 12,
+        "name": "Closed",
+        "isClosed": true,
+        "color": "#878787",
+        "isDefault": false,
+        "isReadonly": true,
+        "position": 5,
+        "_links": {
+          "self": { "href": "/api/v3/statuses/12" }
+        }
+      }
+    ]
+  },
+  "_links": {
+    "self": { "href": "/api/v3/statuses" }
+  }
+}

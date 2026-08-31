@@ -1,0 +1,230 @@
+{
+  "_type": "Form",
+  "_embedded": {
+    "payload": {
+      "subject": null,
+      "description": {
+        "format": "markdown",
+        "raw": "",
+        "html": ""
+      },
+      "scheduleManually": false,
+      "startDate": null,
+      "dueDate": null,
+      "percentageDone": null,
+      "_links": {
+        "category": { "href": null },
+        "type": { "href": "/api/v3/types/1", "title": "Task" },
+        "priority": { "href": "/api/v3/priorities/8", "title": "Normal" },
+        "project": { "href": "/api/v3/projects/7", "title": "Backend" },
+        "status": { "href": "/api/v3/statuses/1", "title": "To Do" },
+        "responsible": { "href": null },
+        "assignee": { "href": null },
+        "version": { "href": null },
+        "parent": { "href": null, "title": null }
+      }
+    },
+    "schema": {
+      "_type": "Schema",
+      "lockVersion": {
+        "type": "Integer",
+        "name": "Lock Version",
+        "required": true,
+        "hasDefault": false,
+        "writable": false
+      },
+      "subject": {
+        "type": "String",
+        "name": "Subject",
+        "required": true,
+        "hasDefault": false,
+        "writable": true,
+        "minLength": 1,
+        "maxLength": 255,
+        "options": {}
+      },
+      "description": {
+        "type": "Formattable",
+        "name": "Description",
+        "required": false,
+        "hasDefault": false,
+        "writable": true,
+        "options": {}
+      },
+      "startDate": {
+        "type": "Date",
+        "name": "Start date",
+        "required": false,
+        "hasDefault": false,
+        "writable": true
+      },
+      "dueDate": {
+        "type": "Date",
+        "name": "Finish date",
+        "required": false,
+        "hasDefault": false,
+        "writable": true
+      },
+      "project": {
+        "type": "Project",
+        "name": "Project",
+        "required": true,
+        "hasDefault": false,
+        "writable": true,
+        "location": "_links",
+        "_links": {
+          "allowedValues": { "href": "/api/v3/work_packages/available_projects" }
+        }
+      },
+      "assignee": {
+        "type": "User",
+        "name": "Assignee",
+        "required": false,
+        "hasDefault": false,
+        "writable": true,
+        "attributeGroup": "People",
+        "location": "_links",
+        "_links": {
+          "allowedValues": { "href": "/api/v3/projects/7/available_assignees" }
+        }
+      },
+      "type": {
+        "type": "Type",
+        "name": "Type",
+        "required": true,
+        "hasDefault": false,
+        "writable": true,
+        "location": "_links",
+        "_embedded": {
+          "allowedValues": [
+            {
+              "_type": "Type",
+              "id": 1,
+              "name": "Task",
+              "color": "#1A67A3",
+              "position": 1,
+              "isDefault": true,
+              "isMilestone": false,
+              "_links": { "self": { "href": "/api/v3/types/1", "title": "Task" } }
+            },
+            {
+              "_type": "Type",
+              "id": 7,
+              "name": "Bug",
+              "color": "#E92E51",
+              "position": 3,
+              "isDefault": false,
+              "isMilestone": false,
+              "_links": { "self": { "href": "/api/v3/types/7", "title": "Bug" } }
+            }
+          ]
+        },
+        "_links": {
+          "allowedValues": [
+            { "href": "/api/v3/types/1", "title": "Task" },
+            { "href": "/api/v3/types/7", "title": "Bug" }
+          ]
+        }
+      },
+      "status": {
+        "type": "Status",
+        "name": "Status",
+        "required": true,
+        "hasDefault": true,
+        "writable": true,
+        "location": "_links",
+        "_embedded": {
+          "allowedValues": [
+            {
+              "_type": "Status",
+              "id": 1,
+              "name": "To Do",
+              "isClosed": false,
+              "color": "#EAEAEA",
+              "isDefault": true,
+              "position": 1,
+              "_links": { "self": { "href": "/api/v3/statuses/1", "title": "To Do" } }
+            },
+            {
+              "_type": "Status",
+              "id": 7,
+              "name": "In progress",
+              "isClosed": false,
+              "color": "#F0F7FF",
+              "isDefault": false,
+              "position": 2,
+              "_links": {
+                "self": { "href": "/api/v3/statuses/7", "title": "In progress" }
+              }
+            }
+          ]
+        },
+        "_links": {
+          "allowedValues": [
+            { "href": "/api/v3/statuses/1", "title": "To Do" },
+            { "href": "/api/v3/statuses/7", "title": "In progress" }
+          ]
+        }
+      },
+      "priority": {
+        "type": "Priority",
+        "name": "Priority",
+        "required": true,
+        "hasDefault": true,
+        "writable": true,
+        "location": "_links",
+        "_embedded": {
+          "allowedValues": [
+            {
+              "_type": "Priority",
+              "id": 8,
+              "name": "Normal",
+              "position": 2,
+              "isDefault": true,
+              "isActive": true,
+              "_links": { "self": { "href": "/api/v3/priorities/8", "title": "Normal" } }
+            },
+            {
+              "_type": "Priority",
+              "id": 9,
+              "name": "High",
+              "position": 3,
+              "isDefault": false,
+              "isActive": true,
+              "_links": { "self": { "href": "/api/v3/priorities/9", "title": "High" } }
+            }
+          ]
+        },
+        "_links": {
+          "allowedValues": [
+            { "href": "/api/v3/priorities/8", "title": "Normal" },
+            { "href": "/api/v3/priorities/9", "title": "High" }
+          ]
+        }
+      },
+      "customField1": {
+        "type": "String",
+        "name": "Team",
+        "required": false,
+        "hasDefault": false,
+        "writable": true
+      }
+    },
+    "validationErrors": {
+      "subject": {
+        "_type": "Error",
+        "errorIdentifier": "urn:openproject-org:api:v3:errors:PropertyConstraintViolation",
+        "message": "Subject can't be blank.",
+        "_embedded": { "details": { "attribute": "subject" } }
+      }
+    }
+  },
+  "_links": {
+    "self": { "href": "/api/v3/work_packages/form", "method": "post" },
+    "validate": { "href": "/api/v3/work_packages/form", "method": "post" },
+    "previewMarkup": {
+      "href": "/api/v3/render/markdown?context=/api/v3/projects/7",
+      "method": "post"
+    }
+  }
+}

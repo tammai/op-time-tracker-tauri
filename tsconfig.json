@@ -1,0 +1,29 @@
+{
+  // Editor root: supplies the path aliases IDEs resolve against. It gates
+  // nothing — `files: []` means `tsc -p tsconfig.json` checks zero files.
+  // `pnpm type-check` runs the real projects explicitly.
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "useDefineForClassFields": true,
+    "jsx": "preserve",
+    "baseUrl": ".",
+    "paths": {
+      "@renderer/*": ["src/*"],
+      "@opentracker/preload": ["src/bridge/index.ts"],
+      "@shared/*": ["src/shared/*"],
+      "~~/*": ["./*"],
+      "#build/ui/*": ["./node_modules/.nuxt-ui/ui/*"]
+    }
+  },
+  "files": []
+}

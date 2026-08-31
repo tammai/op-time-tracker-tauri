@@ -1,0 +1,16 @@
+{
+  // The build tooling itself (Vite/Vitest configs), which runs in Node.
+  "include": ["vite.config.ts", "vitest.config.ts", "eslint.config.js"],
+  "compilerOptions": {
+    "composite": false,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "lib": ["ESNext"],
+    "types": ["node"],
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowJs": true
+  }
+}

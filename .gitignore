@@ -1,0 +1,33 @@
+node_modules/
+dist/
+.vite/
+
+# Rust / Tauri build output. `src-tauri/gen/` is generated from
+# tauri.conf.json + capabilities on every build.
+src-tauri/target/
+src-tauri/gen/
+
+# Icon sources under build/ are committed; generated icon sets and packaged
+# installers are not.
+build/icon.iconset/
+
+# Nuxt UI v4 (Vue-only) auto-generated type declarations
+auto-imports.d.ts
+components.d.ts
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor dirs
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ESLint cache
+.eslintcache

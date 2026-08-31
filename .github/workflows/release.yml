@@ -1,0 +1,149 @@
+# Builds the macOS and Windows installers on a version tag and attaches them to
+# a draft GitHub Release.
+#
+# Each platform must be packaged on its own runner: a Tauri bundle embeds a
+# native binary, so there is no cross-building an NSIS installer from macOS or a
+# DMG from Windows. The two halves therefore run separately and each uploads
+# straight to the release. Uploads use the `gh` CLI (preinstalled on every
+# runner) rather than a third-party action, which keeps the supply chain to the
+# four actions CI already pins.
+#
+# To cut a release: bump `version` in **both** package.json and
+# src-tauri/tauri.conf.json, commit, then
+#   git tag v2.0.1 && git push origin v2.0.1
+# Review the draft on GitHub, write the notes, hit Publish.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Re-run a failed build without re-tagging: pick the tag as the ref in the UI.
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  # Creates the (empty) draft up front so both build jobs have something to
+  # upload to — two jobs racing to create the same release would conflict.
+  draft:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Require a tag ref
+        run: |
+          if [ "${{ github.ref_type }}" != "tag" ]; then
+            echo "::error::This workflow must run on a tag (got ${{ github.ref }})."
+            exit 1
+          fi
+
+      # A tag that disagrees with either manifest produces artifacts whose
+      # filenames don't match the release — cheaper to catch here than after two
+      # platform builds. Tauri takes the bundle version from tauri.conf.json,
+      # not package.json, so both have to agree.
+      - name: Tag must match both manifests
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$pkg" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $pkg."
+            exit 1
+          fi
+          if [ "$conf" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match tauri.conf.json version $conf."
+            exit 1
+          fi
+
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Draft $GITHUB_REF_NAME already exists — reusing it."
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --draft \
+              --title "OP Time Tracker $GITHUB_REF_NAME" \
+              --notes "Unsigned builds. macOS: right-click → Open on first launch. Windows: More info → Run anyway at the SmartScreen prompt. Verify against the SHA256SUMS files below."
+          fi
+
+  build:
+    needs: draft
+    strategy:
+      # One platform failing shouldn't discard a good build of the other — the
+      # draft keeps whatever landed and the failed half can be re-run.
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            name: macos
+            bundles: dmg
+            artifacts: 'src-tauri/target/release/bundle/dmg/*.dmg'
+            sha_cmd: 'shasum -a 256'
+          - os: windows-latest
+            name: windows
+            bundles: nsis
+            artifacts: 'src-tauri/target/release/bundle/nsis/*.exe'
+            sha_cmd: 'sha256sum'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          # A release build is a different profile from CI's; sharing one cache
+          # key would thrash both.
+          key: release-${{ matrix.name }}
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # `tauri build` runs the frontend build itself (beforeBuildCommand), so
+      # there is no separate build step. Bundling only the platform's own target
+      # keeps a macOS runner from also attempting an `app` bundle nobody ships.
+      - name: Build and bundle
+        run: pnpm tauri build --bundles ${{ matrix.bundles }}
+
+      # Recipients can't verify an unsigned binary's origin, so the checksum is
+      # the only integrity handle they get. Published with the artifacts.
+      #
+      # The names are rewritten to what GitHub actually serves: it strips the
+      # directory and replaces spaces with dots ("OP Time Tracker_2.0.0.dmg" →
+      # "OP.Time.Tracker_2.0.0.dmg"). Left as the bundler emits them, every line
+      # names a file the downloader doesn't have and `shasum -c` fails on all of
+      # them — which teaches people to skip the check. `*` marks binary mode,
+      # which both `shasum -c` and `sha256sum -c` accept.
+      - name: Checksums
+        shell: bash
+        run: |
+          sums="SHA256SUMS-${{ matrix.name }}.txt"
+          : > "$sums"
+          for f in ${{ matrix.artifacts }}; do
+            hash=$(${{ matrix.sha_cmd }} "$f" | cut -d' ' -f1)
+            name=$(basename "$f")
+            echo "$hash *${name// /.}" >> "$sums"
+          done
+          cat "$sums"
+
+      - name: Upload to draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # --clobber so a re-run replaces its own artifacts instead of erroring.
+        run: gh release upload "$GITHUB_REF_NAME" ${{ matrix.artifacts }} "SHA256SUMS-${{ matrix.name }}.txt" --clobber

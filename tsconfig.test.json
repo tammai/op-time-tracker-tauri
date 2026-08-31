@@ -1,0 +1,20 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": ["tests/**/*", "src/**/*", "src/**/*.vue"],
+  "compilerOptions": {
+    "composite": false,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "vitest/globals"],
+    "baseUrl": ".",
+    "paths": {
+      "@renderer/*": ["src/*"],
+      "@opentracker/preload": ["src/bridge/index.ts"],
+      "@shared/*": ["src/shared/*"],
+      "~~/*": ["./*"],
+      "#build/ui/*": ["./node_modules/.nuxt-ui/ui/*"]
+    }
+  }
+}

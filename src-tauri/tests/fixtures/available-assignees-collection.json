@@ -1,0 +1,69 @@
+{
+  "_type": "Collection",
+  "total": 5,
+  "count": 5,
+  "_embedded": {
+    "elements": [
+      {
+        "_type": "User",
+        "id": 88,
+        "name": "Dana Okonjo",
+        "_links": {
+          "self": {
+            "href": "/api/v3/users/88",
+            "title": "Dana Okonjo"
+          }
+        }
+      },
+      {
+        "_type": "User",
+        "id": 36,
+        "name": "Priya Raman",
+        "_links": {
+          "self": {
+            "href": "/api/v3/users/36",
+            "title": "Priya Raman"
+          }
+        }
+      },
+      {
+        "_type": "User",
+        "id": 28,
+        "name": "Marco Silva",
+        "_links": {
+          "self": {
+            "href": "/api/v3/users/28",
+            "title": "Marco Silva"
+          }
+        }
+      },
+      {
+        "_type": "User",
+        "id": 22,
+        "name": "Anna Kowalski",
+        "_links": {
+          "self": {
+            "href": "/api/v3/users/22",
+            "title": "Anna Kowalski"
+          }
+        }
+      },
+      {
+        "_type": "Group",
+        "id": 401,
+        "name": "Platform team",
+        "_links": {
+          "self": {
+            "href": "/api/v3/groups/401",
+            "title": "Platform team"
+          }
+        }
+      }
+    ]
+  },
+  "_links": {
+    "self": {
+      "href": "/api/v3/projects/41/available_assignees"
+    }
+  }
+}

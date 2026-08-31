@@ -1,0 +1,86 @@
+{
+  "_type": "Collection",
+  "total": 3,
+  "count": 3,
+  "pageSize": 200,
+  "offset": 1,
+  "_embedded": {
+    "elements": [
+      {
+        "_type": "Project",
+        "id": 7,
+        "identifier": "backend",
+        "name": "Backend",
+        "active": true,
+        "public": false,
+        "description": {
+          "format": "markdown",
+          "raw": "",
+          "html": ""
+        },
+        "createdAt": "2024-04-25T11:24:39Z",
+        "updatedAt": "2024-10-07T04:28:38Z",
+        "statusExplanation": {
+          "format": "markdown",
+          "raw": "",
+          "html": ""
+        },
+        "_links": {
+          "self": { "href": "/api/v3/projects/7", "title": "Backend" },
+          "createWorkPackage": {
+            "href": "/api/v3/projects/7/work_packages/form",
+            "method": "post"
+          },
+          "workPackages": { "href": "/api/v3/projects/7/work_packages" },
+          "categories": { "href": "/api/v3/projects/7/categories" },
+          "types": { "href": "/api/v3/projects/7/types" },
+          "parent": { "href": null, "title": null }
+        }
+      },
+      {
+        "_type": "Project",
+        "id": 12,
+        "identifier": "design-system",
+        "name": "Design System",
+        "active": true,
+        "public": true,
+        "description": {
+          "format": "markdown",
+          "raw": "Shared components.",
+          "html": "<p class=\"op-uc-p\">Shared components.</p>"
+        },
+        "createdAt": "2024-06-01T09:02:11Z",
+        "updatedAt": "2025-02-18T13:44:02Z",
+        "statusExplanation": {
+          "format": "markdown",
+          "raw": "",
+          "html": ""
+        },
+        "_links": {
+          "self": { "href": "/api/v3/projects/12", "title": "Design System" },
+          "createWorkPackage": {
+            "href": "/api/v3/projects/12/work_packages/form",
+            "method": "post"
+          },
+          "parent": { "href": "/api/v3/projects/7", "title": "Backend" }
+        }
+      },
+      {
+        "_type": "Project",
+        "id": 30,
+        "identifier": "archive",
+        "name": "Archive",
+        "active": false,
+        "public": false,
+        "createdAt": "2023-01-09T08:00:00Z",
+        "updatedAt": "2023-11-30T17:15:41Z",
+        "_links": {
+          "self": { "href": "/api/v3/projects/30", "title": "Archive" }
+        }
+      }
+    ]
+  },
+  "_links": {
+    "self": { "href": "/api/v3/work_packages/available_projects" }
+  }
+}

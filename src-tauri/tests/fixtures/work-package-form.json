@@ -1,0 +1,378 @@
+{
+  "_type": "Form",
+  "_embedded": {
+    "payload": {
+      "lockVersion": 5,
+      "subject": "Design the onboarding flow",
+      "startDate": "2024-12-19",
+      "dueDate": "2025-01-23",
+      "_links": {
+        "status": {
+          "href": "/api/v3/statuses/26",
+          "title": "QA Completed"
+        },
+        "type": {
+          "href": "/api/v3/types/1",
+          "title": "Task"
+        },
+        "priority": {
+          "href": "/api/v3/priorities/8",
+          "title": "Normal"
+        },
+        "assignee": {
+          "href": "/api/v3/users/36",
+          "title": "Dana Okonjo"
+        }
+      }
+    },
+    "schema": {
+      "lockVersion": {
+        "type": "Integer",
+        "name": "Lock Version",
+        "required": true,
+        "hasDefault": false,
+        "writable": true,
+        "options": {}
+      },
+      "subject": {
+        "type": "String",
+        "name": "Subject",
+        "required": true,
+        "hasDefault": false,
+        "writable": true,
+        "minLength": 1,
+        "maxLength": 255,
+        "options": {}
+      },
+      "description": {
+        "type": "Formattable",
+        "name": "Description",
+        "required": false,
+        "hasDefault": false,
+        "writable": true,
+        "options": {}
+      },
+      "startDate": {
+        "type": "Date",
+        "name": "Start date",
+        "required": false,
+        "hasDefault": false,
+        "writable": true,
+        "options": {}
+      },
+      "dueDate": {
+        "type": "Date",
+        "name": "Finish date",
+        "required": false,
+        "hasDefault": false,
+        "writable": true,
+        "options": {}
+      },
+      "assignee": {
+        "type": "User",
+        "name": "Assignee",
+        "required": false,
+        "hasDefault": false,
+        "writable": true,
+        "attributeGroup": "People",
+        "location": "_links",
+        "_links": {
+          "allowedValues": {
+            "href": "/api/v3/projects/41/available_assignees"
+          }
+        }
+      },
+      "type": {
+        "type": "Type",
+        "name": "Type",
+        "required": true,
+        "hasDefault": false,
+        "writable": true,
+        "location": "_links",
+        "_embedded": {
+          "allowedValues": [
+            {
+              "_type": "Type",
+              "id": 1,
+              "name": "Task",
+              "color": "#1A67A3",
+              "position": 1,
+              "isDefault": true,
+              "isMilestone": false,
+              "createdAt": "2024-04-25T11:24:39Z",
+              "updatedAt": "2024-10-07T04:28:38Z",
+              "_links": {
+                "self": {
+                  "href": "/api/v3/types/1",
+                  "title": "Task"
+                }
+              }
+            },
+            {
+              "_type": "Type",
+              "id": 6,
+              "name": "User story",
+              "color": "#339933",
+              "position": 6,
+              "isDefault": true,
+              "isMilestone": false,
+              "createdAt": "2024-04-25T11:24:39Z",
+              "updatedAt": "2024-10-07T04:28:51Z",
+              "_links": {
+                "self": {
+                  "href": "/api/v3/types/6",
+                  "title": "User story"
+                }
+              }
+            },
+            {
+              "_type": "Type",
+              "id": 7,
+              "name": "Bug",
+              "color": "#F03E3E",
+              "position": 7,
+              "isDefault": true,
+              "isMilestone": false,
+              "createdAt": "2024-04-25T11:24:39Z",
+              "updatedAt": "2024-10-07T04:29:05Z",
+              "_links": {
+                "self": {
+                  "href": "/api/v3/types/7",
+                  "title": "Bug"
+                }
+              }
+            },
+            {
+              "_type": "Type",
+              "id": 8,
+              "name": "Sub-Task",
+              "color": "#00B0F0",
+              "position": 8,
+              "isDefault": true,
+              "isMilestone": false,
+              "createdAt": "2024-05-07T11:24:44Z",
+              "updatedAt": "2024-05-17T14:12:34Z",
+              "_links": {
+                "self": {
+                  "href": "/api/v3/types/8",
+                  "title": "Sub-Task"
+                }
+              }
+            }
+          ]
+        },
+        "_links": {
+          "allowedValues": [
+            {
+              "href": "/api/v3/types/1",
+              "title": "Task"
+            },
+            {
+              "href": "/api/v3/types/6",
+              "title": "User story"
+            },
+            {
+              "href": "/api/v3/types/7",
+              "title": "Bug"
+            },
+            {
+              "href": "/api/v3/types/8",
+              "title": "Sub-Task"
+            }
+          ]
+        }
+      },
+      "status": {
+        "type": "Status",
+        "name": "Status",
+        "required": true,
+        "hasDefault": true,
+        "writable": true,
+        "location": "_links",
+        "_embedded": {
+          "allowedValues": [
+            {
+              "_type": "Status",
+              "id": 1,
+              "name": "To Do",
+              "isClosed": false,
+              "color": "#EAEAEA",
+              "isDefault": true,
+              "isReadonly": false,
+              "defaultDoneRatio": null,
+              "position": 1,
+              "_links": {
+                "self": {
+                  "href": "/api/v3/statuses/1",
+                  "title": "To Do"
+                }
+              }
+            },
+            {
+              "_type": "Status",
+              "id": 21,
+              "name": "Ready for UAT",
+              "isClosed": false,
+              "color": "#00B0F0",
+              "isDefault": false,
+              "isReadonly": false,
+              "defaultDoneRatio": null,
+              "position": 11,
+              "_links": {
+                "self": {
+                  "href": "/api/v3/statuses/21",
+                  "title": "Ready for UAT"
+                }
+              }
+            },
+            {
+              "_type": "Status",
+              "id": 26,
+              "name": "QA Completed",
+              "isClosed": false,
+              "color": "#00B0F0",
+              "isDefault": false,
+              "isReadonly": false,
+              "defaultDoneRatio": null,
+              "position": 16,
+              "_links": {
+                "self": {
+                  "href": "/api/v3/statuses/26",
+                  "title": "QA Completed"
+                }
+              }
+            }
+          ]
+        },
+        "_links": {
+          "allowedValues": [
+            {
+              "href": "/api/v3/statuses/1",
+              "title": "To Do"
+            },
+            {
+              "href": "/api/v3/statuses/21",
+              "title": "Ready for UAT"
+            },
+            {
+              "href": "/api/v3/statuses/26",
+              "title": "QA Completed"
+            }
+          ]
+        }
+      },
+      "priority": {
+        "type": "Priority",
+        "name": "Priority",
+        "required": true,
+        "hasDefault": true,
+        "writable": true,
+        "attributeGroup": "Details",
+        "location": "_links",
+        "_embedded": {
+          "allowedValues": [
+            {
+              "_type": "Priority",
+              "id": 7,
+              "name": "Low",
+              "position": 1,
+              "color": "#C5F6FA",
+              "isDefault": false,
+              "isActive": true,
+              "_links": {
+                "self": {
+                  "href": "/api/v3/priorities/7",
+                  "title": "Low"
+                }
+              }
+            },
+            {
+              "_type": "Priority",
+              "id": 8,
+              "name": "Normal",
+              "position": 2,
+              "color": "#74C0FC",
+              "isDefault": true,
+              "isActive": true,
+              "_links": {
+                "self": {
+                  "href": "/api/v3/priorities/8",
+                  "title": "Normal"
+                }
+              }
+            },
+            {
+              "_type": "Priority",
+              "id": 9,
+              "name": "High",
+              "position": 3,
+              "color": "#F59F00",
+              "isDefault": false,
+              "isActive": true,
+              "_links": {
+                "self": {
+                  "href": "/api/v3/priorities/9",
+                  "title": "High"
+                }
+              }
+            },
+            {
+              "_type": "Priority",
+              "id": 10,
+              "name": "Immediate",
+              "position": 4,
+              "color": "#CC5DE8",
+              "isDefault": false,
+              "isActive": true,
+              "_links": {
+                "self": {
+                  "href": "/api/v3/priorities/10",
+                  "title": "Immediate"
+                }
+              }
+            }
+          ]
+        },
+        "_links": {
+          "allowedValues": [
+            {
+              "href": "/api/v3/priorities/7",
+              "title": "Low"
+            },
+            {
+              "href": "/api/v3/priorities/8",
+              "title": "Normal"
+            },
+            {
+              "href": "/api/v3/priorities/9",
+              "title": "High"
+            },
+            {
+              "href": "/api/v3/priorities/10",
+              "title": "Immediate"
+            }
+          ]
+        }
+      }
+    },
+    "validationErrors": {}
+  },
+  "_links": {
+    "self": {
+      "href": "/api/v3/work_packages/34922/form",
+      "method": "post"
+    },
+    "validate": {
+      "href": "/api/v3/work_packages/34922/form",
+      "method": "post"
+    },
+    "previewMarkup": {
+      "href": "/api/v3/render/markdown?context=/api/v3/work_packages/34922",
+      "method": "post"
+    },
+    "commit": {
+      "href": "/api/v3/work_packages/34922",
+      "method": "patch"
+    }
+  }
+}
