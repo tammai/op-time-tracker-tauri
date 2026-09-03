@@ -194,7 +194,7 @@ const isQuickStatusDisabled = computed(
             />
           </UTooltip>
         </div>
-        <h2 class="text-base font-semibold text-highlighted break-words">
+        <h2 class="text-lg font-semibold text-highlighted break-words">
           {{ props.workPackage.subject }}
         </h2>
       </div>
@@ -385,7 +385,7 @@ const isQuickStatusDisabled = computed(
               color="neutral"
               variant="soft"
               label="Change status"
-              trailing-icon="i-lucide-chevron-down"
+              trailing-icon="i-lucide-chevron-up"
               :loading="props.editor.isFormLoading.value || props.editor.isSaving.value"
               :disabled="isQuickStatusDisabled"
               :title="props.editor.fields.value.status.reason ?? undefined"
