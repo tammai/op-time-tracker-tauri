@@ -1,14 +1,26 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
 
-import OnboardingView from './views/OnboardingView.vue'
 import CalendarView from './views/CalendarView.vue'
-import DayEntriesModal from './components/DayEntriesModal.vue'
-import SettingsModal from './components/SettingsModal.vue'
-import WorkPackagesModal from './components/WorkPackagesModal.vue'
-import WorkPackageCreateDrawer from './components/WorkPackageCreateDrawer.vue'
 import CalendarHeader from './components/CalendarHeader.vue'
 import { useUiStore } from './stores/useUiStore'
+
+// The calendar is the only configured-user startup surface. Onboarding and all
+// overlays are loaded when their gate/action first needs them, allowing Vite to
+// keep each surface's Nuxt UI controls out of the initial bundle.
+const OnboardingView = defineAsyncComponent(() => import('./views/OnboardingView.vue'))
+const DayEntriesModal = defineAsyncComponent(
+  () => import('./components/DayEntriesModal.vue')
+)
+const SettingsModal = defineAsyncComponent(
+  () => import('./components/SettingsModal.vue')
+)
+const WorkPackagesModal = defineAsyncComponent(
+  () => import('./components/WorkPackagesModal.vue')
+)
+const WorkPackageCreateDrawer = defineAsyncComponent(
+  () => import('./components/WorkPackageCreateDrawer.vue')
+)
 
 /**
  * App shell — one screen.
@@ -150,6 +162,7 @@ const fabVisible = computed(
       />
 
       <SettingsModal
+        v-if="ui.hasOpenedSettings"
         v-model:open="ui.isSettingsOpen"
         @disconnected="onDisconnected"
       />

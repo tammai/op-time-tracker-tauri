@@ -18,6 +18,10 @@ export const useUiStore = defineStore('ui', () => {
   /** Settings modal. */
   const isSettingsOpen = ref(false)
 
+  /** Keep the settings modal mounted after its first open so its close
+   * transition can finish while still avoiding an eager bundle request. */
+  const hasOpenedSettings = ref(false)
+
   /** Day modal. */
   const isDayModalOpen = ref(false)
 
@@ -57,6 +61,7 @@ export const useUiStore = defineStore('ui', () => {
   const activeDate = ref<string | null>(null)
 
   function openSettings(): void {
+    hasOpenedSettings.value = true
     isSettingsOpen.value = true
   }
 
@@ -89,6 +94,7 @@ export const useUiStore = defineStore('ui', () => {
 
   return {
     isSettingsOpen,
+    hasOpenedSettings,
     isDayModalOpen,
     isWorkPackagesOpen,
     hasOpenedWorkPackages,
