@@ -25,10 +25,18 @@ your team's release channel:
 
 | Platform | File |
 |---|---|
-| **Windows 10/11** — x64 | `OP Time Tracker_<version>_x64-setup.exe` |
-| **macOS** — Apple Silicon or Intel | `OP Time Tracker_<version>_*.dmg` |
+| **Windows 10/11** — x64 | `OP.Time.Tracker_<version>_x64-setup.exe` |
+| **macOS** — Apple Silicon (M1 and later) | `OP.Time.Tracker_<version>_aarch64.dmg` |
+| **macOS** — Intel | `OP.Time.Tracker_<version>_x64.dmg` |
 
-Windows installs for the current user only — no admin password. Both builds are
+**The two macOS builds are not interchangeable.** An Apple Silicon DMG will not
+open on an Intel Mac — Rosetta translates Intel code to run on Apple Silicon,
+not the other way round — and the failure is silent, so it reads as a broken
+download rather than the wrong one. If you're unsure which you have: **Apple
+menu → About This Mac**. A line saying **Chip** means Apple Silicon; one saying
+**Processor** means Intel.
+
+Windows installs for the current user only — no admin password. The builds are
 unsigned, so each OS warns once on first launch: on Windows choose **More info →
 Run anyway**; on macOS **right-click → Open → Open**. Once per install.
 
