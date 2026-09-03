@@ -1,18 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, shallowRef, useId, type WritableComputedRef } from 'vue'
+import { computed, useId, type WritableComputedRef } from 'vue'
 import { parseDate, type DateValue } from '@internationalized/date'
-import type { Editor as TiptapEditor } from '@tiptap/vue-3'
-// Type-only, and load-bearing: `setLink`/`unsetLink` reach `ChainedCommands`
-// through this extension's module augmentation. Nuxt UI's editor already runs
-// the extension (Starter Kit pulls it in), but the augmentation only applies
-// where the module is referenced — without this import both commands fail to
-// type-check while working perfectly at runtime.
-import type {} from '@tiptap/extension-link'
-
-import type { EditorToolbarItem } from '@nuxt/ui/components/EditorToolbar.vue'
 
 import { isCalendarDate } from '@shared/validation/calendar-date'
-import { isSafeLinkHref } from '@shared/validation/url'
 import type {
   EditableFieldState,
   WorkPackageFieldName
@@ -22,6 +12,7 @@ import type {
   FieldOption,
   WorkPackageDraft
 } from '@renderer/utils/work-package-draft'
+import MarkdownEditor from './MarkdownEditor.vue'
 
 /**
  * The editable field set of a work package.
@@ -175,97 +166,6 @@ const dateField = computed<EditableFieldState>(() => {
   }
   return { disabled: false, reason: null }
 })
-
-/**
- * The description toolbar.
- *
- * Deliberately only what **markdown round-trips**. `UEditor` also offers
- * underline, text alignment and colour; none of those survive serialisation to
- * markdown, so a button for them would format text that silently reverts on
- * save. The set here maps one-for-one onto CommonMark.
- *
- * `kind` is what binds a button to `UEditor`'s built-in handler — the component
- * owns execute/isActive, so there is no editor plumbing in this file.
- */
-const descriptionToolbar: EditorToolbarItem[][] = [
-  [
-    { kind: 'mark', mark: 'bold', icon: 'i-lucide-bold', 'aria-label': 'Bold' },
-    { kind: 'mark', mark: 'italic', icon: 'i-lucide-italic', 'aria-label': 'Italic' },
-    {
-      kind: 'mark',
-      mark: 'strike',
-      icon: 'i-lucide-strikethrough',
-      'aria-label': 'Strikethrough'
-    },
-    { kind: 'mark', mark: 'code', icon: 'i-lucide-code', 'aria-label': 'Inline code' }
-  ],
-  [
-    { kind: 'heading', level: 1, icon: 'i-lucide-heading-1', 'aria-label': 'Heading 1' },
-    { kind: 'heading', level: 2, icon: 'i-lucide-heading-2', 'aria-label': 'Heading 2' },
-    { kind: 'heading', level: 3, icon: 'i-lucide-heading-3', 'aria-label': 'Heading 3' }
-  ],
-  [
-    { kind: 'bulletList', icon: 'i-lucide-list', 'aria-label': 'Bullet list' },
-    { kind: 'orderedList', icon: 'i-lucide-list-ordered', 'aria-label': 'Numbered list' },
-    { kind: 'blockquote', icon: 'i-lucide-quote', 'aria-label': 'Quote' },
-    { kind: 'codeBlock', icon: 'i-lucide-square-code', 'aria-label': 'Code block' }
-  ],
-  [
-    { kind: 'undo', icon: 'i-lucide-undo-2', 'aria-label': 'Undo' },
-    { kind: 'redo', icon: 'i-lucide-redo-2', 'aria-label': 'Redo' }
-  ]
-]
-
-/**
- * The link dialog.
- *
- * Ours rather than `UEditor`'s built-in `{ kind: 'link' }`, which falls back to
- * `window.prompt()` for the href — and the Tauri webview doesn't implement
- * `prompt`, so that button is dead on click. Passing the href in ourselves uses
- * the same underlying commands with a control that exists.
- *
- * `shallowRef` for the editor: it is a large non-reactive TipTap instance, and
- * making it deeply reactive would be pointless work on every keystroke.
- */
-const isLinkOpen = ref(false)
-const linkHref = ref('')
-const linkEditor = shallowRef<TiptapEditor | null>(null)
-
-/** True once the href is one we're willing to render as an anchor. */
-const isLinkHrefValid = computed(() => isSafeLinkHref(linkHref.value))
-
-/** Whether the cursor already sits in a link, which turns Add into Update. */
-const isEditingExistingLink = computed(
-  () => linkEditor.value?.isActive('link') ?? false
-)
-
-function openLinkDialog(editor: TiptapEditor): void {
-  linkEditor.value = editor
-  // Prefill from the link under the cursor, so editing one isn't retyping it.
-  linkHref.value = (editor.getAttributes('link').href as string | undefined) ?? ''
-  isLinkOpen.value = true
-}
-
-function applyLink(): void {
-  const editor = linkEditor.value
-  if (editor === null || !isLinkHrefValid.value) return
-  // `extendMarkRange` so the whole existing link is replaced rather than the
-  // part the cursor happens to sit in.
-  editor
-    .chain()
-    .focus()
-    .extendMarkRange('link')
-    .setLink({ href: linkHref.value.trim() })
-    .run()
-  isLinkOpen.value = false
-}
-
-function removeLink(): void {
-  const editor = linkEditor.value
-  if (editor === null) return
-  editor.chain().focus().extendMarkRange('link').unsetLink().run()
-  isLinkOpen.value = false
-}
 
 function clearDates(): void {
   draft.value.startDate = ''
@@ -466,128 +366,17 @@ function clearDates(): void {
     </div>
 
     <!-- Description last and full width: the only multi-line field, and the one
-         with no natural length, so it takes the room the panel has left.
-         `min-h-64` rather than a row count — `UEditor` sizes by CSS, having no
-         `rows` prop — and the panel scrolls past it rather than the field
-         growing without limit.
-
-         `content-type="markdown"` is load-bearing, not cosmetic: the draft holds
-         **raw markdown**, which is what `toCreateWorkPackageInput` sends and what
-         the backend wraps in a Formattable with the format pinned there. An
-         editor bound as HTML would put HTML in that field and OpenProject would
-         store it as markdown source. -->
+         with no natural length, so it takes the room the panel has left. The
+         visual editor still emits Markdown — exactly what the backend wraps in
+         OpenProject's Formattable payload. -->
     <div class="col-span-4 flex min-w-0 flex-col gap-1">
-      <!-- A `span`, not a `label`: `UEditor` renders a wrapper `div` around a
-           contenteditable, and `for=` only binds to labelable form controls —
-           pointing at the wrapper would look correct and focus nothing. The
-           editor carries its own `aria-label` instead. -->
       <span class="text-muted">Description</span>
-      <!-- The border and the toolbar are both ours to supply: `UEditor`'s root
-           slot ships empty, so without them the field reads as loose prose on
-           the page rather than an input. `layout="fixed"` keeps the toolbar
-           pinned above the text — the bubble and floating layouts need two more
-           TipTap packages we deliberately didn't install.
-
-           `mode: 'firstLine'` because the default, `everyLine`, repeats the
-           placeholder on every empty paragraph — so pressing Enter inside a
-           description that already has content shows the prompt again halfway
-           down the field.
-
-           The `base` overrides fix spacing meant for a full-width document:
-           `sm:px-8` indents the text away from every other field, `*:my-5` puts
-           1.25rem between blocks, and `leading-7` loosens the lines.
-
-           `:key` on the disabled verdict: `UEditor` reads `editable` once at
-           creation and never watches it, so an editor created non-editable (no
-           project chosen yet) stays non-editable after the project is picked and
-           the prop flips to true. Re-keying on the disabled state forces a fresh
-           editor — created already-editable — the moment a project is chosen.
-           The draft holds the text, so recreation loses no content. -->
-
-      <UEditor
-        v-slot="{ editor }"
-        :key="`description-${props.fields.description.disabled}`"
+      <MarkdownEditor
         v-model="draft.description"
-        content-type="markdown"
-        class="w-full min-h-64 rounded-md border border-accented divide-y divide-accented"
-        :placeholder="{
-          placeholder:
-            'Context, acceptance criteria, links — anything the next person needs',
-          mode: 'firstLine'
-        }"
-        aria-label="Description"
-        :editable="!(props.busy || props.fields.description.disabled)"
-        :ui="{ content: 'p-2', base: 'sm:px-0 *:my-2 [&_p]:leading-normal' }"
-      >
-        <div
-          v-if="!(props.busy || props.fields.description.disabled)"
-          class="flex items-center gap-1 p-1"
-        >
-          <UEditorToolbar
-            :editor="editor"
-            :items="descriptionToolbar"
-            layout="fixed"
-          />
-          <!-- Outside `items` because it opens a dialog rather than running a
-               command — the toolbar's own link item would call `prompt()`. -->
-          <UTooltip text="Link">
-            <UButton
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              icon="i-lucide-link"
-              aria-label="Link"
-              :ui="{ base: editor.isActive('link') ? 'bg-elevated' : '' }"
-              @click="openLinkDialog(editor)"
-            />
-          </UTooltip>
-        </div>
-      </UEditor>
-
-      <UModal
-        v-model:open="isLinkOpen"
-        :title="isEditingExistingLink ? 'Edit link' : 'Add link'"
-        :ui="{ content: 'max-w-md' }"
-      >
-        <template #body>
-          <UInput
-            v-model="linkHref"
-            class="w-full"
-            placeholder="https://example.com"
-            autofocus
-            aria-label="Link URL"
-            @keydown.enter="applyLink"
-          />
-          <!-- Shown only once something has been typed: an empty field is not
-               yet a mistake, and saying so on open is nagging. -->
-          <p v-if="linkHref.trim() && !isLinkHrefValid" class="text-error mt-2 text-xs">
-            Enter a full http or https URL, including the scheme.
-          </p>
-        </template>
-        <template #footer>
-          <div class="flex w-full items-center justify-end gap-2">
-            <UButton
-              v-if="isEditingExistingLink"
-              color="neutral"
-              variant="ghost"
-              label="Remove link"
-              @click="removeLink"
-            />
-            <UButton
-              color="neutral"
-              variant="ghost"
-              label="Cancel"
-              @click="isLinkOpen = false"
-            />
-            <UButton
-              color="primary"
-              :label="isEditingExistingLink ? 'Update' : 'Add'"
-              :disabled="!isLinkHrefValid"
-              @click="applyLink"
-            />
-          </div>
-        </template>
-      </UModal>
+        :disabled="props.busy || props.fields.description.disabled"
+        label="Description"
+        placeholder="Context, acceptance criteria, links — anything the next person needs"
+      />
       <p v-if="props.fields.description.reason" class="text-muted text-xs">
         {{ props.fields.description.reason }}
       </p>

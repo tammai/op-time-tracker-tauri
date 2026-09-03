@@ -4,6 +4,7 @@ import type { WorkPackage } from '@opentracker/preload'
 import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
 
 import { formattableRaw } from '@shared/utils/hal'
+import MarkdownRenderer from './MarkdownRenderer.vue'
 import {
   pendingActionPrompt,
   type PendingAction
@@ -292,32 +293,18 @@ const isQuickStatusDisabled = computed(
              only when there is one: an empty tile spanning the whole pane says
              less than the space it takes.
 
-             Rendered by the same `UEditor`, read-only, from the same **raw
-             markdown** the field edits — so what you read is what you would be
-             editing, parsed by one parser rather than two that can disagree.
-
              Emphatically *not* `description.html`. OpenProject returns a
              rendered copy, but the Stage 3 probe established that the instance
              accepts an arbitrary `format` and script-bearing `html` without
-             objection — so that field is attacker-influenceable and putting it
-             through `v-html` would be an XSS. Parsing the markdown ourselves
-             has no such hole. -->
+             objection. The local renderer escapes raw HTML and rejects unsafe
+             link/image protocols before producing markup. -->
         <div
           v-if="description"
           class="col-span-4 flex min-w-0 flex-col rounded-md bg-elevated p-2"
         >
           <dt class="text-muted text-xs">Description</dt>
-          <dd class="text-highlighted min-w-0 break-words">
-            <!-- `sm:px-0` cancels the editor's own `sm:px-8`, which is meant
-                 for a full-width document surface and here just indents the
-                 description away from every other field on the tile. -->
-            <UEditor
-              :model-value="description"
-              content-type="markdown"
-              :editable="false"
-              class="w-full"
-              :ui="{ base: 'sm:px-0 *:my-2 [&_p]:leading-normal' }"
-            />
+          <dd class="min-w-0 text-highlighted">
+            <MarkdownRenderer :source="description" />
           </dd>
         </div>
       </dl>
