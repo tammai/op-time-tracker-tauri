@@ -300,11 +300,20 @@ export function useWorkPackagePicker(options: UseWorkPackagePickerOptions) {
    * The work packages the dropdown should show, from whichever pass owns the
    * current term.
    *
+   * An empty term is the live, preloaded priority list. It must not use the
+   * latched matches: creating or editing a work package invalidates that query,
+   * and the refetched list needs to appear without requiring a keystroke to
+   * settle the picker again. Typed searches stay latched so a background
+   * refetch cannot replace server results while the user is reading them.
+   *
    * While the debounce is still running, an empty list rather than the previous
    * term's results — those belong to a term the user has already moved past,
    * and `isSearching` is what fills the gap.
    */
   const shownWorkPackages = computed(() => {
+    if (normalizeWorkPackageSearchTerm(searchTerm.value) === '') {
+      return localMatches.value
+    }
     // Mid-debounce: blank rather than the previous term's results, which
     // belong to a term the user has already moved past.
     if (!isSettled.value) return liveMode.value === 'local' ? localMatches.value : []

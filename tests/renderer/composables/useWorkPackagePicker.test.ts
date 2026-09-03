@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { createApp, effectScope, nextTick, type App, type EffectScope } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
-import { PiniaColada } from '@pinia/colada'
+import { PiniaColada, useQueryCache } from '@pinia/colada'
 
 import { useWorkPackagePicker } from '@renderer/composables/useWorkPackagePicker'
 
@@ -222,6 +222,26 @@ describe('useWorkPackagePicker — reopening the form', () => {
     await flush()
 
     expect(reopened.items.value.map((i) => i.value)).toEqual([101, 102])
+  })
+
+  it('shows a newly created item after the priority list refetches', async () => {
+    const picker = mountPicker()
+    await flush()
+
+    expect(picker.items.value.map((i) => i.value)).toEqual([101, 102])
+
+    listWorkPackages.mockResolvedValueOnce(
+      collection([...PRIORITY, wp(103, 'Newly created work package')])
+    )
+
+    let invalidation!: Promise<unknown>
+    app.runWithContext(() => {
+      invalidation = useQueryCache().invalidateQueries({ key: ['work-packages'] })
+    })
+    await invalidation
+    await flush()
+
+    expect(picker.items.value.map((i) => i.value)).toEqual([101, 102, 103])
   })
 })
 

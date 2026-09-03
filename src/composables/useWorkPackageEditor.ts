@@ -1,6 +1,10 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import { useQuery, useQueryCache } from '@pinia/colada'
-import type { Principal, WorkPackage } from '@opentracker/preload'
+import type {
+  Principal,
+  UpdateWorkPackageInput,
+  WorkPackage
+} from '@opentracker/preload'
 
 import {
   useUpdateWorkPackage,
@@ -354,7 +358,7 @@ export function useWorkPackageEditor(selected: Ref<WorkPackage | null>) {
   const { mutateAsync: updateWorkPackage } = useUpdateWorkPackage()
 
   /**
-   * Save the changed fields.
+   * Persist a partial update against the revision shown in the panel.
    *
    * Three outcomes, deliberately different:
    * - **Success** — the echoed work package replaces the selection, which
@@ -369,15 +373,17 @@ export function useWorkPackageEditor(selected: Ref<WorkPackage | null>) {
    *   message shown. A 422 in particular is actionable ("that transition isn't
    *   allowed"), and throwing away the user's work would be the wrong response
    *   to a problem they can fix.
+   *
+   * A regular edit and the read view's quick status selector both use this
+   * path. That keeps lock-version handling, cache invalidation, and conflict
+   * recovery identical instead of growing a second mutation workflow in the
+   * component.
    */
-  async function save(): Promise<void> {
+  async function persistChanges(
+    patch: Omit<UpdateWorkPackageInput, 'id' | 'lockVersion'>
+  ): Promise<void> {
     const workPackage = selected.value
     if (workPackage === null) return
-    if (draftIssue.value !== null) return
-    if (!hasWorkPackageChanges(changes.value)) {
-      isEditing.value = false
-      return
-    }
 
     isSaving.value = true
     saveError.value = null
@@ -387,7 +393,7 @@ export function useWorkPackageEditor(selected: Ref<WorkPackage | null>) {
         id: workPackage.id,
         // The revision the user actually edited — see `snapshotLockVersion`.
         lockVersion: snapshotLockVersion.value,
-        ...changes.value
+        ...patch
       })
       selected.value = updated
       seedFrom(updated)
@@ -404,6 +410,35 @@ export function useWorkPackageEditor(selected: Ref<WorkPackage | null>) {
     } finally {
       isSaving.value = false
     }
+  }
+
+  /** Save all fields changed in the explicit edit form. */
+  async function save(): Promise<void> {
+    if (draftIssue.value !== null) return
+    if (!hasWorkPackageChanges(changes.value)) {
+      isEditing.value = false
+      return
+    }
+    await persistChanges(changes.value)
+  }
+
+  /**
+   * Change only the status from the detail view, without entering edit mode.
+   *
+   * The guards mirror the selector's disabled state, but live here as well so
+   * the invariant survives another caller: only an allowed transition can be
+   * sent, and a quick write cannot overlap an edit, another write, or conflict
+   * recovery. The draft is not changed optimistically, so a rejected update
+   * leaves the status on screen truthful to the selected server revision.
+   */
+  async function quickUpdateStatus(statusId: number): Promise<void> {
+    if (selected.value === null) return
+    if (isEditing.value || isSaving.value || isConflicted.value) return
+    if (fields.value.status.disabled) return
+    if (!statusOptions.value.some((option) => option.value === statusId)) return
+    if (snapshot.value.statusId === statusId) return
+
+    await persistChanges({ statusId })
   }
 
   return {
@@ -429,6 +464,7 @@ export function useWorkPackageEditor(selected: Ref<WorkPackage | null>) {
 
     // Saving
     save,
+    quickUpdateStatus,
     isSaving,
     saveError,
     hasConflict,

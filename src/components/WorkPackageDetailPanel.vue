@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { WorkPackage } from '@opentracker/preload'
+import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
 
 import { formattableRaw } from '@shared/utils/hal'
 import {
@@ -119,6 +120,32 @@ const statusClass = computed(() =>
  * and the draft that edits it can never disagree about what "empty" means.
  */
 const description = computed(() => formattableRaw(props.workPackage.description))
+
+/**
+ * Valid destination statuses for the action-bar menu.
+ *
+ * The current status is omitted because choosing it cannot change anything;
+ * every item left is a transition OpenProject explicitly allows for the
+ * displayed revision. Menu selection delegates to the editor composable so
+ * the component owns no mutation or conflict state.
+ */
+const quickStatusItems = computed<DropdownMenuItem[]>(() => {
+  const currentId = props.editor.draft.value.statusId
+  return props.editor.statusOptions.value
+    .filter((option) => option.value !== currentId)
+    .map((option) => ({
+      label: option.label,
+      onSelect: () => void props.editor.quickUpdateStatus(option.value)
+    }))
+})
+
+const isQuickStatusDisabled = computed(
+  () =>
+    props.editor.fields.value.status.disabled ||
+    props.editor.isSaving.value ||
+    props.editor.isConflicted.value ||
+    quickStatusItems.value.length === 0
+)
 </script>
 
 <template>
@@ -362,6 +389,22 @@ const description = computed(() => formattableRaw(props.workPackage.description)
           />
         </template>
         <template v-else>
+          <UDropdownMenu
+            :items="quickStatusItems"
+            :content="{ align: 'end', side: 'top' }"
+            :disabled="isQuickStatusDisabled"
+          >
+            <UButton
+              color="neutral"
+              variant="soft"
+              label="Change status"
+              trailing-icon="i-lucide-chevron-down"
+              :loading="props.editor.isFormLoading.value || props.editor.isSaving.value"
+              :disabled="isQuickStatusDisabled"
+              :title="props.editor.fields.value.status.reason ?? undefined"
+              :aria-label="`Change status for work package #${props.workPackage.id}`"
+            />
+          </UDropdownMenu>
           <UButton
             color="primary"
             icon="i-lucide-square-pen"

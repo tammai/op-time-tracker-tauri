@@ -322,6 +322,43 @@ describe('useWorkPackageEditor — allowed values', () => {
 })
 
 describe('useWorkPackageEditor — saving', () => {
+  it('quick-updates only the status without entering edit mode', async () => {
+    const selected = ref<WorkPackage | null>(wp())
+    const editor = mountEditor(selected)
+    await flush()
+    updateWorkPackage.mockResolvedValueOnce(
+      wp({
+        lockVersion: 5,
+        _links: {
+          ...wp()._links,
+          status: { href: '/api/v3/statuses/9', title: 'Closed' }
+        }
+      })
+    )
+
+    await editor.quickUpdateStatus(9)
+    await flush()
+
+    expect(updateWorkPackage).toHaveBeenCalledWith({
+      id: 42,
+      lockVersion: 4,
+      statusId: 9
+    })
+    expect(selected.value?._links.status?.title).toBe('Closed')
+    expect(editor.draft.value.statusId).toBe(9)
+    expect(editor.isEditing.value).toBe(false)
+  })
+
+  it('does not quick-update to a status the current workflow disallows', async () => {
+    const editor = mountEditor(ref(wp()))
+    await flush()
+
+    await editor.quickUpdateStatus(999)
+
+    expect(updateWorkPackage).not.toHaveBeenCalled()
+    expect(editor.draft.value.statusId).toBe(3)
+  })
+
   it('sends only the changed fields, with the loaded lock version', async () => {
     const editor = mountEditor(ref(wp()))
     await flush()
