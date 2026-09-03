@@ -75,6 +75,24 @@ impl AppError {
         Self::new("OPENPROJECT_HTTP_ERROR", message)
     }
 
+    /// HTTP 2xx with **no body at all**, where one was required.
+    ///
+    /// Its own code rather than `schema_failed()`, which is what it used to be
+    /// reported as and which sent debugging in entirely the wrong direction: an
+    /// empty body reaches the parser as `null`, serde says "invalid type: null,
+    /// expected struct Collection", and that classifies as "unexpected type or
+    /// missing field" — indistinguishable from real schema drift. It is not
+    /// drift; the shape never arrived. The usual causes are a proxy or gateway
+    /// answering 200 with nothing, or a server dropping the body under load,
+    /// and the wording says so because both are worth retrying.
+    pub fn empty_response() -> Self {
+        Self::new(
+            "OPENPROJECT_EMPTY_RESPONSE",
+            "The OpenProject server accepted the request but sent no data back. \
+             That usually means a proxy or a server under load — try again.",
+        )
+    }
+
     /// The response body did not match the shape we parse. Deliberately
     /// generic: where it failed is logged, not returned.
     pub fn schema_failed() -> Self {

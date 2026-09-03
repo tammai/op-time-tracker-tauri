@@ -12,6 +12,7 @@ import { listener, listenerCtx } from '@milkdown/plugin-listener'
 import {
   commonmark,
   createCodeBlockCommand,
+  insertImageCommand,
   linkSchema,
   toggleEmphasisCommand,
   toggleInlineCodeCommand,
@@ -38,6 +39,7 @@ import {
   codeBlockExitKeymap,
   getActiveListKind,
   type MarkdownListKind,
+  openProjectHtmlNodeView,
   taskListCheckboxPlugin,
   toggleMarkdownListCommand
 } from '@renderer/editor/milkdownEditorPlugins'
@@ -88,6 +90,23 @@ export function useMilkdownEditor(options: UseMilkdownEditorOptions) {
   const toggleOrderedList = (): boolean => run(toggleMarkdownListCommand.key, 'ordered')
   const toggleTaskList = (): boolean => run(toggleMarkdownListCommand.key, 'task')
   const toggleBlockquote = (): boolean => run(wrapInBlockquoteCommand.key)
+
+  /**
+   * Place an image at the cursor.
+   *
+   * `src` is expected to be an `opattach:` URL from an upload response — never
+   * one built in the frontend. It round-trips through Milkdown as an ordinary
+   * Markdown image, and the backend rewrites it to the relative path
+   * OpenProject stores when the description is saved.
+   *
+   * Markdown image syntax rather than the `<figure>` HTML OpenProject's own
+   * editor emits: the image node is part of the CommonMark preset, so it has a
+   * node view, serializes predictably, and is selectable and deletable like any
+   * other block. An inserted `html` node would be none of those things.
+   */
+  const insertImage = (src: string, alt = ''): boolean =>
+    run(insertImageCommand.key, { src, alt })
+
   const undo = (): boolean => run(undoCommand.key)
   const redo = (): boolean => run(redoCommand.key)
 
@@ -252,6 +271,7 @@ export function useMilkdownEditor(options: UseMilkdownEditorOptions) {
         .use(commonmark)
         .use(gfm)
         .use(autoLinkPlugin)
+        .use(openProjectHtmlNodeView)
         .use(codeBlockExitKeymap)
         .use(taskListCheckboxPlugin)
         .use(toggleMarkdownListCommand)
@@ -303,6 +323,7 @@ export function useMilkdownEditor(options: UseMilkdownEditorOptions) {
     activeList,
     createCodeBlock,
     error,
+    insertImage,
     isReady,
     redo,
     removeLink,

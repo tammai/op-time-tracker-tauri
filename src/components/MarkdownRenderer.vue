@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/* eslint-disable vue/no-v-html -- the renderer escapes HTML and filters URLs */
+/* eslint-disable vue/no-v-html -- the renderer rebuilds known HTML, escapes the rest, and filters URLs */
 import { computed } from 'vue'
 
 import { renderMarkdown } from '@renderer/utils/markdown'
@@ -12,8 +12,10 @@ const html = computed(() => renderMarkdown(props.source))
 </script>
 
 <template>
-  <!-- `renderMarkdown` escapes raw HTML and filters every link/image URL before
-       this reaches the DOM. Never replace it with OpenProject's `html` field. -->
+  <!-- `renderMarkdown` filters every link and image URL, escapes raw HTML, and
+       rebuilds the narrow set OpenProject's own editor stores in a description
+       (`utils/openproject-html.ts`) from scratch rather than passing it
+       through. Never replace it with OpenProject's `html` field. -->
   <div class="markdown-renderer" v-html="html" />
 </template>
 
@@ -128,6 +130,32 @@ const html = computed(() => renderMarkdown(props.source))
   border-radius: 0.375rem;
   height: auto;
   max-width: 100%;
+}
+
+/* OpenProject stores an inline image as a `<figure>`, because CommonMark has no
+   figure node. `figure` carries a browser default margin that would indent the
+   image relative to the surrounding text. */
+.markdown-renderer :deep(figure) {
+  margin: 0.5rem 0;
+}
+
+.markdown-renderer :deep(figcaption) {
+  color: var(--ui-text-muted);
+  font-size: 0.8125rem;
+  margin-top: 0.25rem;
+}
+
+/* An embedded macro — a work package table, a table of contents — is rendered
+   server-side from a query this app cannot run, so what appears is a
+   placeholder saying so. Dimmed and bordered, because it names something
+   missing rather than being content itself. */
+.markdown-renderer :deep(.op-uc-macro) {
+  border: 1px dashed var(--ui-border-accented);
+  border-radius: 0.375rem;
+  color: var(--ui-text-muted);
+  display: inline-block;
+  font-size: 0.8125rem;
+  padding: 0.375rem 0.625rem;
 }
 
 .markdown-renderer :deep(table) {

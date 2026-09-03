@@ -141,6 +141,9 @@ let getWorkPackageCreateForm: ReturnType<typeof vi.fn>
 let listAvailableAssignees: ReturnType<typeof vi.fn>
 let createWorkPackage: ReturnType<typeof vi.fn>
 let getCurrentUser: ReturnType<typeof vi.fn>
+let stageAttachmentFiles: ReturnType<typeof vi.fn>
+let discardStagedAttachment: ReturnType<typeof vi.fn>
+let uploadStagedAttachments: ReturnType<typeof vi.fn>
 
 function mountCreator(selected: Ref<WorkPackage | null> = ref(null)) {
   let creator!: ReturnType<typeof useWorkPackageCreator>
@@ -170,6 +173,13 @@ beforeEach(() => {
   // Alice is assignable in project 7 and *not* in project 12 — so the same
   // identity exercises both halves of the default without a second fixture.
   getCurrentUser = vi.fn(() => Promise.resolve({ id: 11, _type: 'User', name: 'Alice' }))
+  stageAttachmentFiles = vi.fn(() =>
+    Promise.resolve([
+      { token: 'staged-1', fileName: 'shot.png', fileSize: 2048, contentType: 'image/png' }
+    ])
+  )
+  discardStagedAttachment = vi.fn(() => Promise.resolve())
+  uploadStagedAttachments = vi.fn(() => Promise.resolve([]))
 
   vi.stubGlobal('window', {
     openproject: {
@@ -177,7 +187,10 @@ beforeEach(() => {
       getWorkPackageCreateForm,
       listAvailableAssignees,
       createWorkPackage,
-      getCurrentUser
+      getCurrentUser,
+      stageAttachmentFiles,
+      discardStagedAttachment,
+      uploadStagedAttachments
     }
   })
 
@@ -871,5 +884,155 @@ describe('useWorkPackageCreator — defaults on entering create mode', () => {
     expect(creator.isCreating.value).toBe(false)
     expect(creator.draft.value.typeId).toBeNull()
     expect(creator.draft.value.assigneeId).toBeNull()
+  })
+})
+
+describe('useWorkPackageCreator — files staged before the work package exists', () => {
+  /** Get a creator in create mode on project 7, with one file staged. */
+  async function withStagedFile() {
+    const creator = mountCreator()
+    await flush()
+    creator.startCreating()
+    creator.projectId.value = 7
+    await flush()
+    await creator.staging.add()
+    await flush()
+    return creator
+  }
+
+  it('stages a file without uploading anything', async () => {
+    const creator = await withStagedFile()
+
+    expect(creator.staging.items.value).toHaveLength(1)
+    expect(creator.staging.items.value[0]?.fileName).toBe('shot.png')
+    // Nothing is uploaded until there is a work package to attach to.
+    expect(uploadStagedAttachments).not.toHaveBeenCalled()
+    expect(createWorkPackage).not.toHaveBeenCalled()
+  })
+
+  it('counts staged files as unsaved work', async () => {
+    const creator = await withStagedFile()
+
+    // The subject is still empty, so the *only* reason this is dirty is the
+    // staged file — and the browse screen's guard is what asks before losing it.
+    expect(creator.draft.value.subject).toBe('')
+    expect(creator.isDirty.value).toBe(true)
+  })
+
+  it('uploads the staged files once the work package exists', async () => {
+    const creator = await withStagedFile()
+    creator.draft.value.subject = 'Brand new'
+    await flush()
+
+    await creator.create()
+    await flush()
+
+    expect(createWorkPackage).toHaveBeenCalledTimes(1)
+    // Against the id the create returned, not anything the form held.
+    expect(uploadStagedAttachments).toHaveBeenCalledWith({
+      workPackageId: 99,
+      tokens: ['staged-1']
+    })
+    expect(creator.staging.items.value).toHaveLength(0)
+    expect(creator.createError.value).toBeNull()
+  })
+
+  it('keeps the created work package when its files are refused', async () => {
+    uploadStagedAttachments = vi.fn(() =>
+      Promise.reject(ipcError('OPENPROJECT_VALIDATION_FAILED', 'File is too large'))
+    )
+    window.openproject.uploadStagedAttachments = uploadStagedAttachments
+
+    const creator = await withStagedFile()
+    creator.draft.value.subject = 'Brand new'
+    await flush()
+
+    await creator.create()
+    await flush()
+
+    // The work package exists — unwinding the selection to report a file
+    // problem would be the wrong trade.
+    expect(creator.isCreating.value).toBe(false)
+    expect(creator.createError.value).toContain('File is too large')
+    // The staged list is dropped either way: the new work package's own
+    // attachments panel is now the honest account of what landed.
+    expect(creator.staging.items.value).toHaveLength(0)
+  })
+
+  it('does not upload anything when nothing was staged', async () => {
+    const creator = mountCreator()
+    await flush()
+    creator.startCreating()
+    creator.projectId.value = 7
+    await flush()
+    creator.draft.value.subject = 'No files'
+    await flush()
+
+    await creator.create()
+    await flush()
+
+    expect(createWorkPackage).toHaveBeenCalledTimes(1)
+    expect(uploadStagedAttachments).not.toHaveBeenCalled()
+  })
+
+  it('releases staged files when the draft is cancelled', async () => {
+    const creator = await withStagedFile()
+
+    creator.cancelCreating()
+    await flush()
+
+    expect(creator.staging.items.value).toHaveLength(0)
+    // The backend is told, so it stops holding the path for the session.
+    expect(discardStagedAttachment).toHaveBeenCalledWith({ token: 'staged-1' })
+  })
+
+  it('removes one staged file on request', async () => {
+    const creator = await withStagedFile()
+
+    await creator.staging.remove('staged-1')
+    await flush()
+
+    expect(creator.staging.items.value).toHaveLength(0)
+    expect(discardStagedAttachment).toHaveBeenCalledWith({ token: 'staged-1' })
+  })
+
+  it('reports a refused pick without unwinding the draft', async () => {
+    stageAttachmentFiles = vi.fn(() =>
+      Promise.reject(ipcError('OPENPROJECT_INVALID_INPUT', '“huge.iso” is larger than the 64 MB'))
+    )
+    window.openproject.stageAttachmentFiles = stageAttachmentFiles
+
+    const creator = mountCreator()
+    await flush()
+    creator.startCreating()
+    creator.projectId.value = 7
+    await flush()
+    creator.draft.value.subject = 'Keep me'
+
+    await creator.staging.add()
+    await flush()
+
+    expect(creator.staging.error.value).toContain('64 MB')
+    expect(creator.staging.items.value).toHaveLength(0)
+    // A rejected file pick is not a reason to lose what was typed.
+    expect(creator.draft.value.subject).toBe('Keep me')
+    expect(creator.isCreating.value).toBe(true)
+  })
+
+  it('treats a cancelled picker as nothing, not as an error', async () => {
+    stageAttachmentFiles = vi.fn(() => Promise.resolve([]))
+    window.openproject.stageAttachmentFiles = stageAttachmentFiles
+
+    const creator = mountCreator()
+    await flush()
+    creator.startCreating()
+    creator.projectId.value = 7
+    await flush()
+
+    await creator.staging.add()
+    await flush()
+
+    expect(creator.staging.items.value).toHaveLength(0)
+    expect(creator.staging.error.value).toBeNull()
   })
 })

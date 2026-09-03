@@ -77,6 +77,17 @@ const props = defineProps<{
   projectLabel?: string
   /** True while a save is in flight — everything locks, nothing is lost. */
   busy?: boolean
+  /**
+   * The work package an image pasted into the description should be attached
+   * to. Passed straight through to `MarkdownEditor`, which is where the
+   * upload happens.
+   *
+   * Absent in create mode, and that is the same reason `projectOptions` is
+   * absent in edit mode: the field is live in one and not the other, and the
+   * data says which. There is no work package id until the thing is saved, so
+   * there is nothing to attach to.
+   */
+  attachTo?: number | null
 }>()
 
 /** True when the project is a choice rather than a fact. */
@@ -374,6 +385,7 @@ function clearDates(): void {
       <MarkdownEditor
         v-model="draft.description"
         :disabled="props.busy || props.fields.description.disabled"
+        :attach-to="props.attachTo ?? null"
         label="Description"
         placeholder="Context, acceptance criteria, links — anything the next person needs"
       />

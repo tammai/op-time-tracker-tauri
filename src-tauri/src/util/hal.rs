@@ -26,6 +26,7 @@ pub const PROJECT_PATH: &str = "/api/v3/projects";
 pub const USER_PATH: &str = "/api/v3/users";
 pub const GROUP_PATH: &str = "/api/v3/groups";
 pub const PLACEHOLDER_USER_PATH: &str = "/api/v3/placeholder_users";
+pub const ATTACHMENT_PATH: &str = "/api/v3/attachments";
 
 /// Compiled `<collection>/<digits>` matchers, one per collection path.
 ///

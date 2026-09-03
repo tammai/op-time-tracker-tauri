@@ -6,6 +6,7 @@ import { useToast } from '@nuxt/ui/composables/useToast'
 import type { WorkPackage } from '@opentracker/preload'
 
 import { useWorkPackageCreator } from '@renderer/composables/useWorkPackageCreator'
+import StagedAttachmentsList from './StagedAttachmentsList.vue'
 import WorkPackageFields from './WorkPackageFields.vue'
 
 /**
@@ -182,6 +183,16 @@ async function onCreate(): Promise<void> {
           :project-options="creator.projectOptions.value"
           :busy="creator.isSaving.value"
         />
+
+        <!-- The same staged-files list the browse screen's create panel
+             mounts. Both surfaces share one `useWorkPackageCreator`, which is
+             what owns the staging and flushes it after the create. -->
+        <div class="mt-2 text-sm">
+          <StagedAttachmentsList
+            :staging="creator.staging"
+            :disabled="creator.isSaving.value"
+          />
+        </div>
       </div>
 
       <!-- Not yet creating: the projects list is still loading, or this key can

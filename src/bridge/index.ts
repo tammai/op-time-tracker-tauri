@@ -23,6 +23,9 @@
 import { invoke } from '@tauri-apps/api/core'
 
 import type {
+  Attachment,
+  AttachmentCollection,
+  AttachmentIdInput,
   AvailableAssigneesInput,
   ConnectionInfo,
   CreateTimeEntryInput,
@@ -37,6 +40,8 @@ import type {
   PrincipalCollection,
   ProjectCollection,
   SaveCredentialsInput,
+  StagedAttachment,
+  StagedTokenInput,
   StatusCollection,
   TestConnectionInput,
   TestConnectionResult,
@@ -45,7 +50,11 @@ import type {
   TimeEntryCollection,
   UpdateTimeEntryInput,
   UpdateWorkPackageInput,
+  UploadAttachmentDataInput,
+  UploadAttachmentFilesInput,
+  UploadStagedAttachmentsInput,
   WorkPackage,
+  WorkPackageAttachmentsInput,
   WorkPackageCollection,
   WorkPackageCreateForm,
   WorkPackageCreateFormInput,
@@ -139,6 +148,8 @@ export const bridge: OpenProjectBridge = {
     call<PrincipalCollection>('list_available_assignees', { input }),
   getCurrentUser: () => call<Principal>('get_current_user'),
   listProjects: () => call<ProjectCollection>('list_projects'),
+  listWorkPackageAttachments: (input: WorkPackageAttachmentsInput) =>
+    call<AttachmentCollection>('list_work_package_attachments', { input }),
 
   // Writes
   createTimeEntry: (input: CreateTimeEntryInput) =>
@@ -151,6 +162,20 @@ export const bridge: OpenProjectBridge = {
     call<WorkPackage>('update_work_package', { input }),
   createWorkPackage: (input: CreateWorkPackageInput) =>
     call<WorkPackage>('create_work_package', { input }),
+  uploadWorkPackageAttachments: (input: UploadAttachmentFilesInput) =>
+    call<Attachment[]>('upload_work_package_attachments', { input }),
+  uploadWorkPackageAttachmentData: (input: UploadAttachmentDataInput) =>
+    call<Attachment>('upload_work_package_attachment_data', { input }),
+  deleteAttachment: (input: AttachmentIdInput) =>
+    call<void>('delete_attachment', { input }),
+  saveAttachment: (input: AttachmentIdInput) =>
+    call<string | null>('save_attachment', { input }),
+  stageAttachmentFiles: (input: UploadAttachmentFilesInput) =>
+    call<StagedAttachment[]>('stage_attachment_files', { input }),
+  discardStagedAttachment: (input: StagedTokenInput) =>
+    call<void>('discard_staged_attachment', { input }),
+  uploadStagedAttachments: (input: UploadStagedAttachmentsInput) =>
+    call<Attachment[]>('upload_staged_attachments', { input }),
 
   // Shell
   openWorkPackageInBrowser: (input: OpenWorkPackageInBrowserInput) =>

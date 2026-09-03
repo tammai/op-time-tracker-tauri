@@ -17,6 +17,54 @@ import {
 import { $command, $prose, $useKeymap } from '@milkdown/utils'
 
 import { findHttpUrlRanges } from '@renderer/utils/markdown-autolink'
+import { renderOpenProjectHtml } from '@renderer/utils/openproject-html'
+
+/**
+ * Render the HTML OpenProject stores in a description, inside the editor.
+ *
+ * The read view already does this (`utils/openproject-html.ts`), but the editor
+ * had the same problem for the same reason and needed its own fix: Milkdown's
+ * `html` node is an atom whose `toDOM` sets `textContent`, so a description
+ * with a screenshot in it showed `<figure class="op-uc-figure"><img …>` as
+ * literal text in the place the image belongs.
+ *
+ * A node **view** rather than a redefined schema, which matters: the node's
+ * `attrs.value` is left untouched, and `toMarkdown` writes it back verbatim. So
+ * this changes what the user sees and nothing about what is saved — an
+ * unrecognised construct still round-trips character for character.
+ *
+ * `innerHTML` is safe here on the same terms as the read view's `v-html`:
+ * `renderOpenProjectHtml` **rebuilds** each construct it recognises, keeping
+ * only `src`, `alt` and `title` re-escaped, and returns `null` for everything
+ * else — which falls through to showing the raw text, exactly as before.
+ */
+export const openProjectHtmlNodeView = $prose(() => {
+  return new Plugin({
+    props: {
+      nodeViews: {
+        html: (node) => {
+          const raw = String(node.attrs.value ?? '')
+          const dom = document.createElement('span')
+          dom.dataset.type = 'html'
+          dom.classList.add('op-uc-html')
+
+          const rendered = renderOpenProjectHtml(raw)
+          if (rendered === null) {
+            // Not on the recognised list, so show it as the text it is. Same
+            // outcome as Milkdown's own `toDOM`.
+            dom.textContent = raw
+          } else {
+            dom.innerHTML = rendered
+          }
+
+          // An atom node: ProseMirror owns the selection and there is nothing
+          // inside for it to manage, so the view reports no content DOM.
+          return { dom }
+        }
+      }
+    }
+  })
+})
 
 /** Add link marks to plain absolute HTTP(S) URLs as the document changes. */
 export const autoLinkPlugin = $prose((ctx) => {

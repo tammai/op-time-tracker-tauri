@@ -2,6 +2,7 @@ import { computed, ref, watch, type Ref } from 'vue'
 import { useQuery } from '@pinia/colada'
 import type { Principal, WorkPackage } from '@opentracker/preload'
 
+import { useStagedAttachments } from '@renderer/composables/useStagedAttachments'
 import {
   useCreateWorkPackage,
   workPackageQueries
@@ -84,6 +85,17 @@ export function useWorkPackageCreator(selected: Ref<WorkPackage | null>) {
   const isCreating = ref(false)
   const isSaving = ref(false)
   const createError = ref<string | null>(null)
+
+  /**
+   * Files picked before the work package exists.
+   *
+   * Owned here rather than by the panel because `create()` has to flush them:
+   * OpenProject attaches to a container, so the upload can only happen once the
+   * create has returned an id. Both create surfaces — the browse panel and the
+   * calendar drawer — get it for free by mounting `StagedAttachmentsList`
+   * against this.
+   */
+  const staging = useStagedAttachments()
 
   // Projects
 
@@ -344,7 +356,10 @@ export function useWorkPackageCreator(selected: Ref<WorkPackage | null>) {
   const isDirty = computed(
     () =>
       isCreating.value &&
-      hasCreateDraftContent(draft.value, defaultedAssigneeId.value)
+      (hasCreateDraftContent(draft.value, defaultedAssigneeId.value) ||
+        // Staged files are unsaved work too: leaving would discard them, and
+        // the browse screen's guard is the only thing that asks first.
+        staging.hasItems.value)
   )
 
   const canCreate = computed(
@@ -386,6 +401,9 @@ export function useWorkPackageCreator(selected: Ref<WorkPackage | null>) {
     // selection or the previous create. Setting it before `isCreating` flips
     // means the `projectId` watcher's cascade runs against the empty draft.
     projectId.value = null
+    // A fresh create starts with nothing staged; anything left from an
+    // abandoned draft is released rather than silently attached to this one.
+    void staging.clear()
     isCreating.value = true
   }
 
@@ -394,6 +412,8 @@ export function useWorkPackageCreator(selected: Ref<WorkPackage | null>) {
     isCreating.value = false
     draft.value = emptyWorkPackageDraft()
     createError.value = null
+    // Releases the backend's hold on every staged path.
+    void staging.clear()
   }
 
   // Creating
@@ -426,9 +446,21 @@ export function useWorkPackageCreator(selected: Ref<WorkPackage | null>) {
       const created = await createWorkPackage(
         toCreateWorkPackageInput(project, typeId, draft.value)
       )
+
+      // Only now can the staged files be uploaded: OpenProject attaches to a
+      // container, and this is the first moment there is one.
+      //
+      // A refused attachment does **not** unwind the create — the work package
+      // exists, and dropping the selection to report a file problem would be
+      // the wrong trade. Create mode ends either way and the message is shown
+      // beside the new work package, whose attachments panel is now the honest
+      // account of what landed.
+      const attachmentError = await staging.uploadTo(created.id)
+
       selected.value = created
       isCreating.value = false
       draft.value = emptyWorkPackageDraft()
+      createError.value = attachmentError
     } catch (e) {
       const error = e as { message?: string } | null
       createError.value = error?.message || GENERIC_CREATE_ERROR
@@ -466,6 +498,9 @@ export function useWorkPackageCreator(selected: Ref<WorkPackage | null>) {
     // Creating
     create,
     isSaving,
-    createError
+    createError,
+
+    // Attachments staged for the work package this will create
+    staging
   }
 }

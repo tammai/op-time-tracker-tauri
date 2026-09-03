@@ -4,6 +4,8 @@ import '@milkdown/prose/tables/style/tables.css'
 
 import { computed, shallowRef, useTemplateRef } from 'vue'
 
+import { DROP_PRIORITY, useFileDrop } from '@renderer/composables/useFileDrop'
+import { useDescriptionImages } from '@renderer/composables/useDescriptionImages'
 import { useMilkdownEditor } from '@renderer/composables/useMilkdownEditor'
 import { isSafeLinkHref } from '@shared/validation/url'
 
@@ -13,6 +15,15 @@ const props = defineProps<{
   disabled?: boolean
   label: string
   placeholder?: string
+  /**
+   * The work package images are attached to, enabling the image button, paste
+   * and drop.
+   *
+   * Absent in the create form, and that is not an oversight: an inline image in
+   * an OpenProject description *is* an attachment, and an attachment needs a
+   * work package to hang off — there is no id until the thing is saved.
+   */
+  attachTo?: number | null
 }>()
 
 const editorRoot = useTemplateRef<HTMLElement>('editorRoot')
@@ -34,6 +45,40 @@ const editor = useMilkdownEditor({
   label: props.label,
   placeholder: props.placeholder
 })
+
+/**
+ * Images in the description: upload as an attachment, insert at the cursor.
+ *
+ * Three ways in, each with a different payload — the toolbar button (Rust opens
+ * the picker), a paste (bytes over IPC), and a drop (OS paths). See
+ * `useDescriptionImages` for why they differ.
+ */
+const images = useDescriptionImages({
+  workPackageId: () => props.attachTo ?? null,
+  insert: (src, alt) => editor.insertImage(src, alt)
+})
+
+/**
+ * A drop on the editor inserts the image; a drop on the panel behind it only
+ * attaches. Registered at the higher priority so exactly one of those happens —
+ * Tauri delivers the drop to the window rather than to an element, so without
+ * a single owner both would fire.
+ */
+const { isOver: isDropTarget } = useFileDrop({
+  element: () => editorRoot.value,
+  enabled: () => images.isEnabled.value && !props.disabled,
+  onDrop: (paths) => void images.insertFromPaths(paths),
+  priority: DROP_PRIORITY.editor
+})
+
+/**
+ * Consume a paste that carries an image; let every other paste through
+ * untouched, or copying a paragraph into the description would stop working.
+ */
+function onPaste(event: ClipboardEvent): void {
+  if (props.disabled) return
+  images.handlePaste(event)
+}
 
 function openLinkDialog(): void {
   const activeHref = editor.activeLinkHref()
@@ -200,6 +245,25 @@ function removeLink(): void {
       >
         <UIcon name="i-lucide-link" class="size-4" />
       </button>
+      <!-- Shown only when there is a work package to attach to — see the
+           `attachTo` prop. A disabled button here would be unexplainable in the
+           create form, where the answer is "save it first". -->
+      <button
+        v-if="images.isEnabled.value"
+        type="button"
+        class="markdown-button"
+        aria-label="Insert image"
+        title="Insert image"
+        :disabled="!editor.isReady.value || images.isUploading.value"
+        @mousedown.prevent
+        @click="images.pickAndInsert()"
+      >
+        <UIcon
+          :name="images.isUploading.value ? 'i-lucide-loader-circle' : 'i-lucide-image'"
+          class="size-4"
+          :class="images.isUploading.value ? 'animate-spin' : ''"
+        />
+      </button>
 
       <span class="mx-0.5 h-5 border-l border-accented" aria-hidden="true" />
 
@@ -227,7 +291,13 @@ function removeLink(): void {
       </button>
     </div>
 
-    <div v-show="!editor.error.value" ref="editorRoot" class="milkdown-root min-h-64" />
+    <div
+      v-show="!editor.error.value"
+      ref="editorRoot"
+      class="milkdown-root min-h-64"
+      :class="isDropTarget ? 'bg-primary/5 outline-2 -outline-offset-2 outline-primary' : ''"
+      @paste="onPaste"
+    />
 
     <div v-if="editor.error.value" class="p-3">
       <p class="mb-2 text-xs text-error">
@@ -323,6 +393,31 @@ function removeLink(): void {
 .markdown-button:disabled {
   cursor: default;
   opacity: 0.45;
+}
+
+/* An inline image OpenProject stored as a `<figure>`, rendered by
+   `openProjectHtmlNodeView` instead of shown as tags. Inline-block because the
+   node is inline and the figure inside it is not. */
+.milkdown-root :deep(.op-uc-html) {
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: top;
+}
+
+.milkdown-root :deep(.op-uc-html figure) {
+  margin: 0;
+}
+
+.milkdown-root :deep(.op-uc-html img) {
+  border-radius: 0.375rem;
+  height: auto;
+  max-width: 100%;
+}
+
+.milkdown-root :deep(.op-uc-html figcaption) {
+  color: var(--ui-text-muted);
+  font-size: 0.8125rem;
+  margin-top: 0.25rem;
 }
 
 .milkdown-root :deep(.milkdown),

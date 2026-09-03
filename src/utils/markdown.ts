@@ -1,32 +1,25 @@
 import { Marked, Renderer, type Tokens } from 'marked'
 
-import { isSafeLinkHref } from '@shared/validation/url'
-
-const HTML_CHARACTER = /[&<>"']/g
-const HTML_ESCAPES: Record<string, string> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;'
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(HTML_CHARACTER, (character) => HTML_ESCAPES[character] ?? character)
-}
+import { escapeHtml } from '@renderer/utils/html'
+import { renderOpenProjectHtml } from '@renderer/utils/openproject-html'
+import { isSafeImageSrc, isSafeLinkHref } from '@shared/validation/url'
 
 /**
  * Render OpenProject's raw Markdown without trusting either its stored HTML or
  * arbitrary HTML embedded in the Markdown itself.
  *
  * Marked's normal renderers already escape text and code. These overrides close
- * the two remaining injection paths: raw HTML is displayed as text, and only
- * absolute http(s) destinations become links or images. The same URL policy is
- * used by the editor's link dialog.
+ * the remaining injection paths: only absolute http(s) destinations become
+ * links, only those and this app's attachment proxy become images, and raw HTML
+ * is displayed as text — *except* for the narrow set of constructs OpenProject's
+ * own editor stores inside a description, which `renderOpenProjectHtml` rebuilds
+ * from scratch. See that module for what is on the list and why the blanket
+ * escape was not enough on its own.
  */
 const renderer = new Renderer()
 
-renderer.html = ({ text }: Tokens.HTML | Tokens.Tag): string => escapeHtml(text)
+renderer.html = ({ text }: Tokens.HTML | Tokens.Tag): string =>
+  renderOpenProjectHtml(text) ?? escapeHtml(text)
 
 renderer.link = function ({ href, title, tokens }: Tokens.Link): string {
   const label = this.parser.parseInline(tokens)
@@ -36,8 +29,13 @@ renderer.link = function ({ href, title, tokens }: Tokens.Link): string {
   return `<a href="${escapeHtml(href)}"${safeTitle}>${label}</a>`
 }
 
+/**
+ * `isSafeImageSrc`, not `isSafeLinkHref`: an inline attachment arrives as an
+ * `opattach:` URL, which is a legitimate image source and a useless anchor
+ * href. Everything else the two accept is identical.
+ */
 renderer.image = ({ href, title, text }: Tokens.Image): string => {
-  if (!isSafeLinkHref(href)) return escapeHtml(text)
+  if (!isSafeImageSrc(href)) return escapeHtml(text)
 
   const safeTitle = title ? ` title="${escapeHtml(title)}"` : ''
   return `<img src="${escapeHtml(href)}" alt="${escapeHtml(text)}"${safeTitle}>`

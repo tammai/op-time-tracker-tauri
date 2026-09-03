@@ -6,6 +6,7 @@ import {
   type PendingAction
 } from '@renderer/composables/useWorkPackagesBrowser'
 import type { useWorkPackageCreator } from '@renderer/composables/useWorkPackageCreator'
+import StagedAttachmentsList from './StagedAttachmentsList.vue'
 import WorkPackageFields from './WorkPackageFields.vue'
 
 /**
@@ -99,6 +100,16 @@ const statusClass = computed(() =>
         :project-options="props.creator.projectOptions.value"
         :busy="props.creator.isSaving.value"
       />
+
+      <!-- Files, below the fields as in the edit panel. Its own component
+           because nothing here exists on the server yet — see
+           `StagedAttachmentsList`. -->
+      <div class="mt-2 text-sm">
+        <StagedAttachmentsList
+          :staging="props.creator.staging"
+          :disabled="props.creator.isSaving.value"
+        />
+      </div>
     </div>
 
     <!-- Actions, pinned to the bottom of the pane — the same bar, in the same

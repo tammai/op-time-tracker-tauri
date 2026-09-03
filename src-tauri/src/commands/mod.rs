@@ -15,6 +15,7 @@
 //! There is deliberately no `get_credentials` command. The webview can learn
 //! *whether* a key is stored and can save or clear one; it can never read one.
 
+pub mod attachments;
 pub mod credentials;
 pub mod openproject;
 pub mod shell;

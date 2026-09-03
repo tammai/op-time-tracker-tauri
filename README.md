@@ -107,7 +107,54 @@ An entry logged elsewhere in an unusual shape may have its pencil greyed out —
 the form can't safely read it back. Delete still works, and you can always edit
 it in OpenProject's own UI.
 
-## 6. Settings
+## 6. Files on a work package
+
+The work package screen shows an **Attachments** list under the fields, and the
+description above it renders inline images — screenshots, diagrams, anything
+somebody pasted into OpenProject's own editor.
+
+Those images need your API key to load, which a browser tab gets from its login
+session and this app does not. It fetches them itself instead, so they appear
+without you doing anything. If one shows as broken, your key is the first thing
+to check in Settings.
+
+**On a work package that doesn't exist yet** — the create form has the same
+Attachments section. Files added there are held locally and uploaded the moment
+the work package is created, because OpenProject has nothing to attach them to
+until then. Remove one with the ✕ before creating and it is simply dropped.
+Cancelling the draft discards them all.
+
+That is also why the description editor offers no image button while creating:
+an inline image points at an attachment id, and there is no attachment until the
+work package exists. Create it, then paste your screenshots into the description.
+
+**Adding files** — two ways, and both attach to whichever work package is
+selected:
+
+- **Add files** opens a normal file picker. Pick several at once if you like.
+- **Drop them on the panel.** Dropping on the *description editor* instead
+  attaches the file **and** places the image in the text at your cursor.
+
+While editing a description you can also **paste a screenshot straight in** —
+copy, click into the description, paste. It uploads and appears in place. The
+🖼 button in the editor toolbar does the same from a file picker.
+
+Pasting or dropping into the description while you have unsaved edits is safe:
+the edit is kept, not discarded.
+
+**Reading them** — click an image to open it full-size; ← and → step through the
+other images, Escape closes. Click anything else, or the ⬇ button on any row, to
+save it to disk.
+
+**Deleting** — the 🗑 button, which confirms first. It's worth reading that
+confirm: deleting a file that a description uses as an inline image leaves a
+broken image behind. The button only appears at all if your OpenProject account
+may delete that file.
+
+Uploads are subject to your instance's own size limit — 5 MB unless your admin
+raised it. Over it, OpenProject's own message says so.
+
+## 7. Settings
 
 The ⚙ button, top right:
 
@@ -118,15 +165,20 @@ The ⚙ button, top right:
   screen. Nothing in OpenProject is touched.
 - The app version is in the footer — worth quoting if you report a problem.
 
-## 7. When something goes wrong
+## 8. When something goes wrong
 
 | What you see | What it usually is |
 |---|---|
 | **Connection failed** while testing | Wrong URL, expired/revoked API key, or the VPN isn't up. |
 | **Couldn't load time entries** on the calendar | Server unreachable or credentials no longer valid. **Retry**; if it persists, re-check the key in Settings. |
+| **Server accepted the request but sent no data back** (`OPENPROJECT_EMPTY_RESPONSE`) | The server answered OK with an empty body — usually a proxy or gateway in front of OpenProject, or the server dropping the body under load. **Retry**; it is not a problem with your key or the app. |
+| A work package you expected is **missing from the list** | One item OpenProject sent didn't match what the app parses, so it was skipped rather than emptying the whole list. The rest are unaffected. The dev log names the field; quote it when reporting. |
 | **Couldn't load activities**, saving disabled | OpenProject didn't return the activity list for that project. **Retry**; if it sticks, you likely lack permission to log time on that project. |
 | **Entry no longer exists** | Someone deleted it in OpenProject while you had it open. The list refreshes itself. |
 | Hours snapped down to 8 | The cap for new entries. Log the rest as a second entry, or edit an existing one (editing allows up to 24). |
+| A description's image shows as **broken** | The app couldn't fetch it. Usually an expired or revoked API key — re-enter it in Settings. It can also mean the attachment was deleted in OpenProject. |
+| **Some files were not attached** | Files upload one at a time and stop at the first refusal, so earlier ones did land. The message carries OpenProject's reason — most often the file is over the instance's size limit. |
+| An attached file **wasn't inserted** into the description | The upload worked; only the placement failed. Click into the description where you want it and use the 🖼 button. |
 
 Each error box shows a short code (e.g. `OPENPROJECT_NOT_FOUND`) — include it
 when asking for help.
@@ -178,6 +230,8 @@ src-tauri/
   src/openproject/    URL building, filters, the HTTP client
   src/schemas/        serde response models + payload builders (was Zod)
   src/credentials.rs  OS keychain + the base-URL settings file
+  src/attachment_protocol.rs  the opattach: scheme, for inline images
+  src/staged_attachments.rs   files picked before the work package exists
   src/util/           hal / time / validation, the Rust half of src/shared
   tests/fixtures/     captured live responses, parsed in CI
 tests/                frontend tests (vitest)
@@ -188,9 +242,10 @@ docs/                 architecture + security
 
 Two suites, split by which half they cover:
 
-- **`pnpm test`** — 405 frontend tests: calendar aggregation, drafts, filters,
-  the three composables, and the shared validators.
-- **`pnpm test:rust`** — 107 backend tests: URL assembly, filter operators,
+- **`pnpm test`** — 495 frontend tests: calendar aggregation, drafts, filters,
+  the three composables, the shared validators, and the description renderer's
+  HTML rules.
+- **`pnpm test:rust`** — 145 backend tests: URL assembly, filter operators,
   payload builders (including clear-vs-omit), error-status mapping, the "no
   error ever carries the API key" invariant, and eight fixture tests that parse
   responses captured from a live instance.

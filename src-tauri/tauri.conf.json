@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OP Time Tracker",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "identifier": "vn.bigin.op-time-tracker",
   "build": {
     "beforeDevCommand": "pnpm dev:vite",
@@ -22,7 +22,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; script-src 'self'"
+      "csp": "default-src 'self'; img-src 'self' data: opattach: https: http:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost; script-src 'self'"
     }
   },
   "bundle": {

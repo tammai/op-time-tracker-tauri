@@ -1,5 +1,10 @@
 import { z } from 'zod'
 
+import {
+  ATTACHMENT_PROXY_SCHEME,
+  ATTACHMENT_PROXY_WINDOWS_HOST
+} from '@shared/constants/openproject'
+
 /**
  * Result of validating a user-supplied OpenProject base URL.
  * On success, `url` is a normalized `URL` (origin trailing slash, no
@@ -70,6 +75,37 @@ export function isSafeLinkHref(input: string): boolean {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false
   return parsed.hostname.length > 0
+}
+
+/**
+ * Whether `input` is a source we are willing to load an image from.
+ *
+ * Everything `isSafeLinkHref` allows, plus this app's own attachment proxy
+ * scheme. Kept separate rather than widening that function: an `opattach:` URL
+ * is a legitimate *image source* and a useless *anchor href*, and only images
+ * should be able to reach the scheme.
+ *
+ * Both platform spellings are accepted whichever platform is running —
+ * `opattach://localhost/12` on macOS and Linux, `http://opattach.localhost/12`
+ * on Windows. The Windows form already satisfies the http(s) rule, so it is
+ * matched explicitly only to document that it is intentional.
+ *
+ * Note what this does *not* do: it never builds a proxy URL, and it does not
+ * check that the id exists. The backend rewrites descriptions to these URLs and
+ * refuses any path that is not one positive integer.
+ */
+export function isSafeImageSrc(input: string): boolean {
+  const trimmed = (input ?? '').trim()
+  if (trimmed.length === 0) return false
+  let parsed: URL
+  try {
+    parsed = new URL(trimmed)
+  } catch {
+    return false
+  }
+  if (parsed.protocol === `${ATTACHMENT_PROXY_SCHEME}:`) return parsed.hostname.length > 0
+  if (parsed.protocol === 'http:' && parsed.hostname === ATTACHMENT_PROXY_WINDOWS_HOST) return true
+  return isSafeLinkHref(trimmed)
 }
 
 /**

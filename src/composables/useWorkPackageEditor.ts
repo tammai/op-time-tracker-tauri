@@ -147,6 +147,46 @@ export function useWorkPackageEditor(selected: Ref<WorkPackage | null>) {
     { immediate: true }
   )
 
+  /**
+   * Adopt a revision bump that did not touch anything under edit.
+   *
+   * The problem this solves: attaching a file to a work package — or logging
+   * time against it, or leaving a comment — bumps its `lockVersion` without
+   * changing any field this panel edits. Left alone, the save that follows an
+   * in-editor image paste would answer 409 and the user would lose a
+   * description they were halfway through writing, over a change they made
+   * themselves.
+   *
+   * So a bump is adopted **only when every field the draft covers still matches
+   * the snapshot it was seeded from**. That is the whole test, and it is what
+   * keeps this from being a silent-overwrite hatch: if the incoming revision
+   * differs in any field, nothing is adopted, the pinned lock version stays
+   * stale, and the save conflicts exactly as it did before. The dangerous case
+   * — somebody else edited the subject — is untouched.
+   *
+   * Watched on the lock version rather than on the object so an ordinary
+   * refetch that changed nothing does no work.
+   */
+  watch(
+    () => selected.value?.lockVersion ?? null,
+    (lockVersion) => {
+      if (lockVersion === null || !isEditing.value) return
+      if (lockVersion === snapshotLockVersion.value) return
+
+      const workPackage = selected.value
+      if (workPackage === null) return
+
+      const server = toWorkPackageDraft(workPackage)
+      // The comparison is against the *snapshot*, not the draft: the user's own
+      // unsaved typing is not evidence that the server changed something.
+      if (hasWorkPackageChanges(diffWorkPackageDraft(snapshot.value, server))) return
+
+      snapshotLockVersion.value = lockVersion
+      // A conflict raised by an earlier save is not cleared here — that one was
+      // a real refusal, and only `refreshFromServer` resolves it.
+    }
+  )
+
   // Allowed values
 
   // Two independent requests, fired in parallel. Neither depends on the other,

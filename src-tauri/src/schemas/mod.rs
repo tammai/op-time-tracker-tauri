@@ -6,6 +6,7 @@
 //! response that fails to parse surfaces as `OPENPROJECT_SCHEMA_FAILED` — a
 //! malformed or hostile server can never hand the webview an arbitrary shape.
 
+pub mod attachments;
 pub mod common;
 pub mod principals;
 pub mod projects;

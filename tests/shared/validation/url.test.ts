@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
-  validateOpenProjectBaseUrl,
   OpenProjectBaseUrlSchema,
   formatUrlZodError,
-  isSafeLinkHref
+  isSafeImageSrc,
+  isSafeLinkHref,
+  validateOpenProjectBaseUrl
 } from '@shared/validation/url'
 import { z } from 'zod'
 
@@ -209,5 +210,49 @@ describe('isSafeLinkHref', () => {
     expect(isSafeLinkHref('')).toBe(false)
     expect(isSafeLinkHref('   ')).toBe(false)
     expect(isSafeLinkHref('http://')).toBe(false)
+  })
+})
+
+describe('isSafeImageSrc', () => {
+  it('accepts the attachment proxy URL, in both platform spellings', () => {
+    // The macOS/Linux form and the Windows one. Both are accepted whichever
+    // platform is running: a description written on one OS is edited on the
+    // other, and the backend produces whichever its own build targets.
+    expect(isSafeImageSrc('opattach://localhost/12345')).toBe(true)
+    expect(isSafeImageSrc('http://opattach.localhost/12345')).toBe(true)
+  })
+
+  it('accepts everything an anchor href may be', () => {
+    expect(isSafeImageSrc('https://example.com/a.png')).toBe(true)
+    expect(isSafeImageSrc('http://example.com/a.png')).toBe(true)
+  })
+
+  it('rejects the schemes the link rule rejects', () => {
+    for (const source of [
+      'javascript:alert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'data:image/png;base64,AAAA',
+      'file:///etc/passwd',
+      'vbscript:msgbox(1)',
+      'example.com/a.png',
+      '',
+      '   '
+    ]) {
+      expect(isSafeImageSrc(source), source).toBe(false)
+    }
+  })
+
+  it('rejects a proxy URL with no host', () => {
+    expect(isSafeImageSrc('opattach:///12345')).toBe(false)
+  })
+
+  it('is a superset of isSafeLinkHref and nothing more', () => {
+    // Anything an anchor may point at, an image may load. The reverse does not
+    // hold, which is the whole reason there are two functions.
+    for (const source of ['https://example.com/a', 'http://example.com/a']) {
+      expect(isSafeImageSrc(source), source).toBe(isSafeLinkHref(source))
+    }
+    expect(isSafeLinkHref('opattach://localhost/1')).toBe(false)
+    expect(isSafeImageSrc('opattach://localhost/1')).toBe(true)
   })
 })

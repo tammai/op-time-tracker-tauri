@@ -19,6 +19,57 @@ describe('renderMarkdown', () => {
     expect(html).toContain('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;')
   })
 
+  it('escapes the HTML that is not on the OpenProject list', () => {
+    for (const source of [
+      '<script>alert(1)</script>',
+      '<iframe src="https://example.com"></iframe>',
+      '<svg onload="alert(1)"></svg>'
+    ]) {
+      const html = renderMarkdown(source)
+      expect(html, source).not.toContain(source)
+      expect(html, source).toContain('&lt;')
+    }
+  })
+
+  it('renders the figure OpenProject stores an inline image as', () => {
+    // The whole point of `utils/openproject-html.ts`: escaped wholesale, this
+    // showed the user the tags instead of the screenshot.
+    const html = renderMarkdown(
+      'Before\n\n<figure class="op-uc-figure">' +
+        '<img class="op-uc-image" src="opattach://localhost/12345" alt="Shot">' +
+        '<figcaption>Step 1</figcaption></figure>\n\nAfter'
+    )
+
+    expect(html).toContain('<img src="opattach://localhost/12345" alt="Shot">')
+    expect(html).toContain('<figcaption>Step 1</figcaption>')
+    expect(html).not.toContain('&lt;figure')
+    expect(html).not.toContain('op-uc-figure')
+    // The surrounding Markdown still renders as Markdown.
+    expect(html).toContain('<p>Before</p>')
+    expect(html).toContain('<p>After</p>')
+  })
+
+  it('renders an inline attachment written as a Markdown image', () => {
+    expect(renderMarkdown('![Shot](opattach://localhost/12345)')).toContain(
+      '<img src="opattach://localhost/12345" alt="Shot">'
+    )
+  })
+
+  it('never makes an attachment URL a clickable link', () => {
+    // `isSafeImageSrc` widens what an image may load; anchors stay http(s) only.
+    expect(renderMarkdown('[Shot](opattach://localhost/12345)')).not.toContain('<a ')
+  })
+
+  it('leaves HTML inside a code block as a code sample', () => {
+    // A fenced block is a different token type, so it never reaches the HTML
+    // renderer — a description documenting `<figure>` still shows the markup.
+    const html = renderMarkdown('```html\n<figure><img src="x"></figure>\n```')
+
+    expect(html).toContain('<code')
+    expect(html).toContain('&lt;figure&gt;')
+    expect(html).not.toContain('<figure>')
+  })
+
   it('renders only absolute http or https links', () => {
     expect(renderMarkdown('[Safe](https://example.com/path)')).toContain(
       '<a href="https://example.com/path">Safe</a>'

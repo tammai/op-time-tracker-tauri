@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, useTemplateRef } from 'vue'
 import type { WorkPackage } from '@opentracker/preload'
 import type { DropdownMenuItem } from '@nuxt/ui/components/DropdownMenu.vue'
 
@@ -21,6 +21,8 @@ import {
   workPackageStatusLabel,
   workPackageTypeLabel
 } from '@renderer/utils/work-package-display'
+import { DROP_PRIORITY, useFileDrop } from '@renderer/composables/useFileDrop'
+import WorkPackageAttachments from './WorkPackageAttachments.vue'
 import WorkPackageFields from './WorkPackageFields.vue'
 
 /**
@@ -140,6 +142,27 @@ const quickStatusItems = computed<DropdownMenuItem[]>(() => {
     }))
 })
 
+/**
+ * Files dropped anywhere on this panel are attached to the work package it is
+ * showing.
+ *
+ * The drop is not an HTML5 one — Tauri intercepts the window's native drop and
+ * delivers OS paths through its own event, so the routing lives in
+ * `useFileDrop` and this only supplies the rectangle. The description editor
+ * registers the same way at a higher priority, so a drop on the editor inserts
+ * the image instead of merely attaching it, and never does both.
+ */
+const panelRoot = useTemplateRef<HTMLElement>('panelRoot')
+const attachments = useTemplateRef<{ handleDrop: (paths: string[]) => void }>(
+  'attachments'
+)
+
+const { isOver: isDropTarget } = useFileDrop({
+  element: () => panelRoot.value,
+  onDrop: (paths) => attachments.value?.handleDrop(paths),
+  priority: DROP_PRIORITY.panel
+})
+
 const isQuickStatusDisabled = computed(
   () =>
     props.editor.fields.value.status.disabled ||
@@ -153,7 +176,11 @@ const isQuickStatusDisabled = computed(
   <!-- `flex-1`, not `h-full`. The detail pane is a flex column that may also
        hold the unsaved-changes strip below this panel; `h-full` would claim the
        pane's whole height regardless and push that strip out of view. -->
-  <div class="flex min-h-0 flex-1 flex-col">
+  <div
+    ref="panelRoot"
+    class="relative flex min-h-0 flex-1 flex-col"
+    :class="isDropTarget ? 'outline-2 -outline-offset-2 outline-primary' : ''"
+  >
     <div class="min-h-0 flex-1 overflow-y-auto">
       <!-- Header: the id leads, as it does everywhere else in this app — it is
            what a user looks up in OpenProject itself. The subject stays here in
@@ -216,44 +243,48 @@ const isQuickStatusDisabled = computed(
         :assignee-options="props.editor.assigneeOptions.value"
         :project-label="workPackageProjectLabel(props.workPackage)"
         :busy="props.editor.isSaving.value || props.editor.isConflicted.value"
+        :attach-to="props.workPackage.id"
       />
 
       <!-- Each value sits on its own dimmed tile: in a four-column grid of bare
            label/value pairs there is nothing to say where one field ends and
            the next begins, and the tile does that without a rule per cell.
-           Label and value stack flush inside it — the tile is already one unit,
-           so a gap between its two lines only loosens what the padding just
-           bound together. -->
+
+           `gap-1` between the label and the value: flush stacking read as one
+           run of text, and it was worst on the description, where a leading
+           image butted straight against the word "Description". The tile's
+           padding groups the pair; the gap is what separates the two lines
+           inside it. -->
       <dl v-else class="grid grid-cols-4 items-start gap-2 text-sm">
-        <div class="col-span-2 flex min-w-0 flex-col rounded-md bg-elevated p-2">
+        <div class="col-span-2 flex min-w-0 flex-col gap-1 rounded-md bg-elevated p-2">
           <dt class="text-muted text-xs">Project</dt>
           <dd class="text-highlighted">
             {{ workPackageProjectLabel(props.workPackage) }}
           </dd>
         </div>
 
-        <div class="flex min-w-0 flex-col rounded-md bg-elevated p-2">
+        <div class="flex min-w-0 flex-col gap-1 rounded-md bg-elevated p-2">
           <dt class="text-muted text-xs">Type</dt>
           <dd class="text-highlighted">
             {{ workPackageTypeLabel(props.workPackage) }}
           </dd>
         </div>
 
-        <div class="flex min-w-0 flex-col rounded-md bg-elevated p-2">
+        <div class="flex min-w-0 flex-col gap-1 rounded-md bg-elevated p-2">
           <dt class="text-muted text-xs">Priority</dt>
           <dd class="text-highlighted">
             {{ workPackagePriorityLabel(props.workPackage) }}
           </dd>
         </div>
 
-        <div class="flex min-w-0 flex-col rounded-md bg-elevated p-2">
+        <div class="flex min-w-0 flex-col gap-1 rounded-md bg-elevated p-2">
           <dt class="text-muted text-xs">Assignee</dt>
           <dd class="text-highlighted">
             {{ workPackageAssigneeLabel(props.workPackage) }}
           </dd>
         </div>
 
-        <div class="flex min-w-0 flex-col rounded-md bg-elevated p-2">
+        <div class="flex min-w-0 flex-col gap-1 rounded-md bg-elevated p-2">
           <dt class="text-muted text-xs">Status</dt>
           <dd
             class="font-medium"
@@ -263,7 +294,7 @@ const isQuickStatusDisabled = computed(
           </dd>
         </div>
 
-        <div class="flex min-w-0 flex-col rounded-md bg-elevated p-2">
+        <div class="flex min-w-0 flex-col gap-1 rounded-md bg-elevated p-2">
           <dt class="text-muted text-xs">Start date</dt>
           <dd class="text-highlighted tabular-nums">
             {{
@@ -276,7 +307,7 @@ const isQuickStatusDisabled = computed(
           </dd>
         </div>
 
-        <div class="flex min-w-0 flex-col rounded-md bg-elevated p-2">
+        <div class="flex min-w-0 flex-col gap-1 rounded-md bg-elevated p-2">
           <dt class="text-muted text-xs">Due date</dt>
           <dd class="text-highlighted tabular-nums">
             {{
@@ -300,7 +331,7 @@ const isQuickStatusDisabled = computed(
              link/image protocols before producing markup. -->
         <div
           v-if="description"
-          class="col-span-4 flex min-w-0 flex-col rounded-md bg-elevated p-2"
+          class="col-span-4 flex min-w-0 flex-col gap-1 rounded-md bg-elevated p-2"
         >
           <dt class="text-muted text-xs">Description</dt>
           <dd class="min-w-0 text-highlighted">
@@ -308,6 +339,18 @@ const isQuickStatusDisabled = computed(
           </dd>
         </div>
       </dl>
+
+      <!-- Attachments, below the fields in both modes rather than inside the
+           read view's `dl`: a file list is not a label/value pair, and it stays
+           usable while the description is being edited — that is how a pasted
+           screenshot gets attached in the first place. -->
+      <div class="mt-2">
+        <WorkPackageAttachments
+          ref="attachments"
+          :work-package-id="props.workPackage.id"
+          :disabled="props.editor.isSaving.value"
+        />
+      </div>
       </div>
     </div>
 

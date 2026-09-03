@@ -84,6 +84,62 @@ export interface WorkPackage {
 
 export type WorkPackageCollection = Collection<WorkPackage>
 
+/** The links an attachment carries that the UI reads. */
+export interface AttachmentLinks {
+  author?: HalLink
+  container?: HalLink
+  /**
+   * Present only when this key may delete the attachment — OpenProject
+   * expresses the permission as the presence of the link. Read `canDelete`
+   * rather than testing for it.
+   */
+  delete?: HalLink
+}
+
+/**
+ * One attachment on a work package.
+ *
+ * `canDelete` and `proxyUrl` are **computed by the backend**, not sent by
+ * OpenProject (`src-tauri/src/schemas/attachments.rs`). Both are marked
+ * `skip_deserializing` there, so a hostile instance cannot assert either one.
+ */
+export interface Attachment {
+  id: number
+  fileName: string
+  fileSize?: number
+  contentType?: string
+  createdAt?: string
+  _links: AttachmentLinks
+  /** Whether the stored key may delete this attachment. */
+  canDelete: boolean
+  /**
+   * The `opattach:` URL that renders this attachment's bytes in an `<img>`.
+   *
+   * `/api/v3/attachments/{id}/content` needs an auth header an `<img>` cannot
+   * send, so the backend serves the bytes on its own URI scheme instead — see
+   * `src-tauri/src/attachment_protocol.rs`. Use it as-is; never build one here.
+   */
+  proxyUrl: string
+}
+
+export type AttachmentCollection = Collection<Attachment>
+
+/**
+ * A file chosen for a work package that does not exist yet.
+ *
+ * OpenProject attaches to a container, so a create has nothing to attach to
+ * until it succeeds. The backend holds the chosen file and hands back this
+ * handle plus enough metadata to draw a list — **never the path**
+ * (`src-tauri/src/staged_attachments.rs`). `token` is opaque and
+ * process-local; it is the only way to refer to the file again.
+ */
+export interface StagedAttachment {
+  token: string
+  fileName: string
+  fileSize: number
+  contentType: string
+}
+
 export interface TimeEntryLinks {
   self: HalLink
   workPackage?: HalLink
@@ -375,6 +431,55 @@ export interface BridgeErrorShape extends Error {
 
 // The bridge
 
+/** Whose attachments to list, or upload to. */
+export interface WorkPackageAttachmentsInput {
+  workPackageId: number
+}
+
+/** One attachment, by id — delete and save both take this. */
+export interface AttachmentIdInput {
+  id: number
+}
+
+/**
+ * Files to attach.
+ *
+ * Omit `paths` to have the **backend** open the native file picker, which is
+ * the normal case: the chosen paths never cross IPC in either direction. Pass
+ * `paths` only with the paths from a `tauri://drag-drop` event — the one case
+ * where the webview legitimately knows a path the user picked, because the OS
+ * handed it there.
+ */
+export interface UploadAttachmentFilesInput {
+  workPackageId: number
+  paths?: string[]
+}
+
+/**
+ * An attachment whose bytes never had a path — a screenshot pasted into the
+ * description editor.
+ *
+ * `data` is base64. It is not a byte array because Tauri serializes one as a
+ * JSON array of numbers, costing roughly six bytes of IPC per byte of image.
+ */
+export interface UploadAttachmentDataInput {
+  workPackageId: number
+  fileName: string
+  contentType?: string
+  data: string
+}
+
+/** Which staged file to forget. */
+export interface StagedTokenInput {
+  token: string
+}
+
+/** The staged files to upload, and the work package that now exists for them. */
+export interface UploadStagedAttachmentsInput {
+  workPackageId: number
+  tokens: string[]
+}
+
 export interface OpenProjectBridge {
   /**
    * Returns true if credentials are saved. Cheap — does not expose the API key.
@@ -506,6 +611,82 @@ export interface OpenProjectBridge {
    * the project no longer allows) — the caller keeps the draft and shows it.
    */
   createWorkPackage(input: CreateWorkPackageInput): Promise<WorkPackage>
+
+  /**
+   * Every attachment on one work package.
+   *
+   * Each element carries a `proxyUrl` for rendering it and a `canDelete` the
+   * delete button gates on. Not paginated — OpenProject returns the whole set.
+   */
+  listWorkPackageAttachments(
+    input: WorkPackageAttachmentsInput
+  ): Promise<AttachmentCollection>
+
+  /**
+   * Attach one or more files, returning what landed.
+   *
+   * With `paths` omitted the backend opens the native file picker; an empty
+   * array back means the user cancelled it, which is not an error.
+   *
+   * Uploads run sequentially and **stop at the first failure**, so a rejection
+   * may still have attached earlier files — OpenProject has no batch endpoint to
+   * make this atomic. Refetch the list either way.
+   */
+  uploadWorkPackageAttachments(
+    input: UploadAttachmentFilesInput
+  ): Promise<Attachment[]>
+
+  /** Attach base64 bytes — a pasted screenshot, which has no path on disk. */
+  uploadWorkPackageAttachmentData(
+    input: UploadAttachmentDataInput
+  ): Promise<Attachment>
+
+  /**
+   * Delete an attachment. Irreversible, and it can break a description: an
+   * inline image whose attachment is gone renders broken. Confirm first.
+   */
+  deleteAttachment(input: AttachmentIdInput): Promise<void>
+
+  /**
+   * Save an attachment to a location the user picks.
+   *
+   * The backend opens the save dialog and takes the suggested file name from
+   * **OpenProject**, not from here, so no frontend string becomes a path it
+   * writes to. Resolves to the file name written, or `null` when the user
+   * cancelled.
+   */
+  saveAttachment(input: AttachmentIdInput): Promise<string | null>
+
+  /**
+   * Choose files for a work package that does not exist yet.
+   *
+   * Nothing is uploaded: the backend takes custody of the files and returns a
+   * handle for each. Each one is validated now, so an oversized or unreadable
+   * file is reported while the form is still being filled in rather than after
+   * the create.
+   *
+   * Same `paths` split as `uploadWorkPackageAttachments` — omit it for the
+   * native picker, pass it only with drag-and-drop paths. An empty array back
+   * means the user cancelled the picker.
+   */
+  stageAttachmentFiles(
+    input: UploadAttachmentFilesInput
+  ): Promise<StagedAttachment[]>
+
+  /** Drop one staged file — the user removed it, or the draft was cancelled. */
+  discardStagedAttachment(input: StagedTokenInput): Promise<void>
+
+  /**
+   * Upload every staged file to the work package that was just created.
+   *
+   * A token is released only once its file has landed, so a failure part-way
+   * through leaves the rest staged rather than losing them. Like the other
+   * upload path it stops at the first refusal, so a rejection may still have
+   * attached earlier files — refetch the list either way.
+   */
+  uploadStagedAttachments(
+    input: UploadStagedAttachmentsInput
+  ): Promise<Attachment[]>
 
   /**
    * Open a work package in the user's default browser.

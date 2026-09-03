@@ -23,18 +23,24 @@
 use std::time::Duration;
 
 use base64::Engine;
+use once_cell::sync::Lazy;
+use regex::Regex;
 use reqwest::{Method, StatusCode};
 use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 
 use crate::credentials::Credentials;
 use crate::error::AppError;
-use crate::openproject::attachment_urls::{absolutize_attachment_urls, relativize_attachment_urls};
+use crate::openproject::attachment_urls::{deproxify_attachment_urls, proxify_attachment_urls};
 use crate::openproject::filters::{
     clamp_page_size, encode_time_entry_params, encode_work_package_params, TimeEntryFilters,
     WorkPackageFilters,
 };
 use crate::openproject::url::build_request_url;
+use crate::schemas::attachments::{
+    guess_content_type, sanitize_file_name, upload_metadata, Attachment, AttachmentCollection,
+    MAX_ATTACHMENT_BYTES,
+};
 use crate::schemas::common::Collection;
 use crate::schemas::principals::{Principal, PrincipalCollection};
 use crate::schemas::projects::ProjectCollection;
@@ -48,7 +54,9 @@ use crate::schemas::work_packages::{
     CreateWorkPackageInput, UpdateWorkPackageInput, WorkPackage, WorkPackageCollection,
     WorkPackageCreateForm, WorkPackageCreateFormInput, WorkPackageForm, WorkPackageFormInput,
 };
-use crate::util::hal::{PROJECT_PATH, TIME_ENTRY_PATH, TYPE_PATH, USER_PATH, WORK_PACKAGE_PATH};
+use crate::util::hal::{
+    ATTACHMENT_PATH, PROJECT_PATH, TIME_ENTRY_PATH, TYPE_PATH, USER_PATH, WORK_PACKAGE_PATH,
+};
 use crate::util::validation::validate_positive_id;
 
 /// Default request timeout.
@@ -124,17 +132,38 @@ pub fn extract_api_error_message(raw_body: &str) -> Option<String> {
     Some(joined)
 }
 
-/// Log **where** a response failed to parse — the serde path and reason — so
-/// schema drift is diagnosable without that detail reaching the webview.
+/// A quoted string literal in a serde message.
 ///
-/// serde reports a field path and a type mismatch, not the offending value, so
-/// nothing user-authored is logged: a work package subject or comment never
-/// reaches stderr.
+/// serde embeds the *offending value* for some mismatches — `invalid type:
+/// string "…", expected i64` — and on this API that value is user-authored: a
+/// work package subject, a comment. Field names are delimited with backticks
+/// rather than quotes, so redacting double-quoted runs keeps the half that
+/// diagnoses the drift and drops the half that must not be logged.
+static QUOTED_LITERAL: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r#""[^"]*""#).expect("quoted literal pattern is valid"));
+
+/// serde's own message, with any quoted value redacted.
+fn redact_literals(message: &str) -> String {
+    QUOTED_LITERAL.replace_all(message, "\"…\"").into_owned()
+}
+
+/// Log **which field** a response failed to parse on, so schema drift is
+/// diagnosable without that detail reaching the webview.
+///
+/// serde's message is what carries the field path (`missing field
+/// \`lockVersion\``, `invalid type: null, expected a string`), and it is the
+/// only thing here that turns "something drifted" into a one-line fix. It is
+/// passed through [`redact_literals`] first, so nothing user-authored reaches
+/// stderr — that is the property the category-only version bought by throwing
+/// the path away as well.
+///
+/// No line or column: every caller reaches this through `parse`, which uses
+/// `serde_json::from_value`, and a value has no textual position — both were
+/// always `0`.
 fn log_parse_failure(context: &str, error: &serde_json::Error) {
     eprintln!(
-        "[openproject] {context}: response did not match the expected shape at line {}, column {} — {}",
-        error.line(),
-        error.column(),
+        "[openproject] {context}: response did not match the expected shape — {} ({})",
+        redact_literals(&error.to_string()),
         error.classify_as_str()
     );
 }
@@ -153,6 +182,40 @@ impl ClassifyAsStr for serde_json::Error {
             serde_json::error::Category::Eof => "truncated response",
         }
     }
+}
+
+/// An attachment's bytes plus the content type the server labelled them with.
+///
+/// The content type is forwarded rather than re-guessed: the protocol handler
+/// hands it straight to the webview, and the webview decides how to render on
+/// the strength of it.
+pub struct AttachmentContent {
+    pub bytes: Vec<u8>,
+    pub content_type: Option<String>,
+}
+
+/// The content type to label an upload's file part with.
+///
+/// A caller-supplied type wins — the clipboard reports the real type of a
+/// pasted screenshot, which is better than any guess from a synthesised file
+/// name. Anything unusable as a MIME string is discarded rather than passed on:
+/// `Part::mime_str` would reject it and fail the whole upload, so a throwaway
+/// part is used to test it first.
+fn resolve_upload_content_type(supplied: Option<&str>, file_name: &str) -> String {
+    let candidate = supplied
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+
+    if let Some(candidate) = candidate {
+        if reqwest::multipart::Part::text("")
+            .mime_str(&candidate)
+            .is_ok()
+        {
+            return candidate;
+        }
+    }
+    guess_content_type(file_name).to_string()
 }
 
 pub struct OpenProjectClient {
@@ -194,9 +257,12 @@ impl OpenProjectClient {
         let url = build_request_url(&self.credentials.base_url, WORK_PACKAGE_PATH, &params)
             .map_err(AppError::invalid_input)?;
         let body = self.request(Method::GET, url, None).await?;
-        let mut collection: WorkPackageCollection = self.parse(body, "list_work_packages")?;
+        // Element-tolerant: one work package with an instance-specific oddity
+        // must not empty the whole list. See `parse_collection`.
+        let mut collection: WorkPackageCollection =
+            self.parse_collection(body, "list_work_packages")?;
         for work_package in &mut collection.embedded.elements {
-            self.absolutize_description(work_package);
+            self.proxify_description(work_package);
         }
         Ok(collection)
     }
@@ -441,6 +507,149 @@ impl OpenProjectClient {
         self.parse(body, "list_projects")
     }
 
+    // Attachments
+
+    /// `GET /api/v3/work_packages/{id}/attachments`.
+    ///
+    /// No pagination: OpenProject returns a work package's attachments in one
+    /// collection, and a work package with more than a screenful of them is not
+    /// a case this list needs to page through.
+    pub async fn list_work_package_attachments(
+        &self,
+        work_package_id: i64,
+    ) -> Result<AttachmentCollection, AppError> {
+        let id = validate_positive_id(work_package_id, "The work package id")
+            .map_err(AppError::invalid_input)?;
+        let url = build_request_url(
+            &self.credentials.base_url,
+            &format!("{WORK_PACKAGE_PATH}/{id}/attachments"),
+            &[],
+        )
+        .map_err(AppError::invalid_input)?;
+        let body = self.request(Method::GET, url, None).await?;
+        let mut collection: AttachmentCollection =
+            self.parse(body, "list_work_package_attachments")?;
+        // `canDelete` and `proxyUrl` are filled in here rather than in the
+        // command, so no path can hand the webview an attachment without them.
+        collection.embedded.elements = collection
+            .embedded
+            .elements
+            .into_iter()
+            .map(Attachment::with_computed_fields)
+            .collect();
+        Ok(collection)
+    }
+
+    /// `GET /api/v3/attachments/{id}` — one attachment's metadata.
+    ///
+    /// Fetched for its `fileName` alone, by the save command, so the name a file
+    /// is written under comes from OpenProject rather than from the webview.
+    pub async fn get_attachment(&self, attachment_id: i64) -> Result<Attachment, AppError> {
+        let id = validate_positive_id(attachment_id, "The attachment id")
+            .map_err(AppError::invalid_input)?;
+        let url = build_request_url(
+            &self.credentials.base_url,
+            &format!("{ATTACHMENT_PATH}/{id}"),
+            &[],
+        )
+        .map_err(AppError::invalid_input)?;
+        let body = self.request(Method::GET, url, None).await?;
+        let attachment: Attachment = self.parse(body, "get_attachment")?;
+        Ok(attachment.with_computed_fields())
+    }
+
+    /// `GET /api/v3/attachments/{id}/content` — the bytes.
+    ///
+    /// Serves both the `opattach:` protocol handler (which renders them in an
+    /// `<img>`) and the save-to-disk command. The id is validated and the path
+    /// rebuilt from `ATTACHMENT_PATH`; a `downloadLocation` href the server
+    /// supplied is never followed as given.
+    pub async fn fetch_attachment_content(
+        &self,
+        attachment_id: i64,
+    ) -> Result<AttachmentContent, AppError> {
+        let id = validate_positive_id(attachment_id, "The attachment id")
+            .map_err(AppError::invalid_input)?;
+        let url = build_request_url(
+            &self.credentials.base_url,
+            &format!("{ATTACHMENT_PATH}/{id}/content"),
+            &[],
+        )
+        .map_err(AppError::invalid_input)?;
+        self.request_bytes(url).await
+    }
+
+    /// `POST /api/v3/work_packages/{id}/attachments` — a multipart upload.
+    ///
+    /// OpenProject requires two parts and refuses the request without both: a
+    /// `metadata` JSON part naming the file, and the `file` part itself.
+    ///
+    /// The instance enforces its own size limit (5 MB by default) and answers
+    /// HTTP 422 when a file exceeds it, which surfaces with OpenProject's own
+    /// wording. `MAX_ATTACHMENT_BYTES` is a separate, much higher ceiling on
+    /// what this process will buffer at all.
+    pub async fn upload_work_package_attachment(
+        &self,
+        work_package_id: i64,
+        file_name: &str,
+        content_type: Option<&str>,
+        bytes: Vec<u8>,
+    ) -> Result<Attachment, AppError> {
+        let id = validate_positive_id(work_package_id, "The work package id")
+            .map_err(AppError::invalid_input)?;
+        if bytes.is_empty() {
+            return Err(AppError::invalid_input("An empty file cannot be attached."));
+        }
+        if bytes.len() > MAX_ATTACHMENT_BYTES {
+            return Err(AppError::invalid_input(format!(
+                "That file is larger than the {} MB this app will upload.",
+                MAX_ATTACHMENT_BYTES / (1024 * 1024)
+            )));
+        }
+
+        let file_name = sanitize_file_name(file_name);
+        let content_type = resolve_upload_content_type(content_type, &file_name);
+
+        let metadata = reqwest::multipart::Part::text(upload_metadata(&file_name).to_string())
+            .mime_str("application/json")
+            .map_err(|_| AppError::server_error("Could not build the upload request."))?;
+        let file = reqwest::multipart::Part::bytes(bytes)
+            .file_name(file_name)
+            .mime_str(&content_type)
+            .map_err(|_| AppError::server_error("Could not build the upload request."))?;
+        let form = reqwest::multipart::Form::new()
+            .part("metadata", metadata)
+            .part("file", file);
+
+        let url = build_request_url(
+            &self.credentials.base_url,
+            &format!("{WORK_PACKAGE_PATH}/{id}/attachments"),
+            &[],
+        )
+        .map_err(AppError::invalid_input)?;
+        let body = self.request_multipart(url, form).await?;
+        let attachment: Attachment = self.parse(body, "upload_work_package_attachment")?;
+        Ok(attachment.with_computed_fields())
+    }
+
+    /// `DELETE /api/v3/attachments/{id}`.
+    ///
+    /// Irreversible: OpenProject has no undo for a deleted attachment, and an
+    /// inline image in a description whose attachment is gone renders broken.
+    /// The UI confirms before calling this.
+    pub async fn delete_attachment(&self, attachment_id: i64) -> Result<(), AppError> {
+        let id = validate_positive_id(attachment_id, "The attachment id")
+            .map_err(AppError::invalid_input)?;
+        let url = build_request_url(
+            &self.credentials.base_url,
+            &format!("{ATTACHMENT_PATH}/{id}"),
+            &[],
+        )
+        .map_err(AppError::invalid_input)?;
+        self.request(Method::DELETE, url, None).await?;
+        Ok(())
+    }
+
     // Writes
 
     /// `POST /api/v3/time_entries`.
@@ -508,8 +717,8 @@ impl OpenProjectClient {
     ) -> Result<WorkPackage, AppError> {
         let id = validate_positive_id(input.id, "The work package id")
             .map_err(AppError::invalid_input)?;
-        let relativized = input
-            .map_description(|raw| relativize_attachment_urls(raw, &self.credentials.base_url));
+        let relativized =
+            input.map_description(|raw| deproxify_attachment_urls(raw, &self.credentials.base_url));
         let payload = relativized
             .build_payload()
             .map_err(AppError::invalid_input)?;
@@ -522,7 +731,7 @@ impl OpenProjectClient {
         .map_err(AppError::invalid_input)?;
         let body = self.request(Method::PATCH, url, Some(payload)).await?;
         let mut work_package: WorkPackage = self.parse(body, "update_work_package")?;
-        self.absolutize_description(&mut work_package);
+        self.proxify_description(&mut work_package);
         Ok(work_package)
     }
 
@@ -534,8 +743,8 @@ impl OpenProjectClient {
         &self,
         input: &CreateWorkPackageInput,
     ) -> Result<WorkPackage, AppError> {
-        let relativized = input
-            .map_description(|raw| relativize_attachment_urls(raw, &self.credentials.base_url));
+        let relativized =
+            input.map_description(|raw| deproxify_attachment_urls(raw, &self.credentials.base_url));
         let payload = relativized
             .build_payload()
             .map_err(AppError::invalid_input)?;
@@ -544,7 +753,7 @@ impl OpenProjectClient {
             .map_err(AppError::invalid_input)?;
         let body = self.request(Method::POST, url, Some(payload)).await?;
         let mut work_package: WorkPackage = self.parse(body, "create_work_package")?;
-        self.absolutize_description(&mut work_package);
+        self.proxify_description(&mut work_package);
         Ok(work_package)
     }
 
@@ -558,16 +767,17 @@ impl OpenProjectClient {
 
     // Internals
 
-    /// Inline attachment URLs are stored relative and are useless from the
-    /// webview's origin. Applied to every work package leaving the client;
-    /// reversed on everything entering it.
-    fn absolutize_description(&self, work_package: &mut WorkPackage) {
+    /// Inline attachment URLs are stored relative, and even made absolute they
+    /// need an auth header an `<img>` cannot send. Every work package leaving
+    /// the client has them pointed at this app's `opattach:` proxy; everything
+    /// entering it has that undone. See `openproject::attachment_urls`.
+    fn proxify_description(&self, work_package: &mut WorkPackage) {
         let raw = work_package.description.raw();
         if raw.is_empty() {
             return;
         }
-        let absolute = absolutize_attachment_urls(raw, &self.credentials.base_url);
-        work_package.description = work_package.description.with_raw(absolute);
+        let proxied = proxify_attachment_urls(raw, &self.credentials.base_url);
+        work_package.description = work_package.description.with_raw(proxied);
     }
 
     /// Perform a request with auth and a timeout, returning the raw JSON body.
@@ -597,29 +807,7 @@ impl OpenProjectClient {
             request = request.json(body);
         }
 
-        let response = match request.send().await {
-            Ok(response) => response,
-            Err(error) if error.is_timeout() => {
-                return Err(AppError::timeout(self.timeout.as_secs()))
-            }
-            Err(error) => {
-                // A transport failure. The message names the kind of failure,
-                // never the key or the auth header — and reqwest's own display
-                // for a connect error carries the URL, so it is not forwarded.
-                let reason = if error.is_connect() {
-                    "the connection was refused or the host could not be resolved"
-                } else if error.is_request() {
-                    "the request could not be sent"
-                } else if error.is_body() || error.is_decode() {
-                    "the response could not be read"
-                } else {
-                    "the request failed"
-                };
-                return Err(AppError::server_error(format!(
-                    "Could not reach the OpenProject server: {reason}."
-                )));
-            }
-        };
+        let response = self.send(request).await?;
 
         let status = response.status();
         let text = response.text().await.unwrap_or_default();
@@ -641,6 +829,125 @@ impl OpenProjectClient {
         }
 
         Err(self.map_error_status(status, &text))
+    }
+
+    /// Send a prepared request, mapping every transport failure onto our own
+    /// wording.
+    ///
+    /// Shared by the JSON, bytes, and multipart paths so all three fail
+    /// identically — and so the rule that no message names the key, the auth
+    /// header, or the URL holds in one place rather than three. reqwest's own
+    /// display for a connect error carries the URL, which is why the reason is
+    /// re-derived from the error's kind rather than forwarded.
+    async fn send(&self, request: reqwest::RequestBuilder) -> Result<reqwest::Response, AppError> {
+        request.send().await.map_err(|error| {
+            if error.is_timeout() {
+                return AppError::timeout(self.timeout.as_secs());
+            }
+            let reason = if error.is_connect() {
+                "the connection was refused or the host could not be resolved"
+            } else if error.is_request() {
+                "the request could not be sent"
+            } else if error.is_body() || error.is_decode() {
+                "the response could not be read"
+            } else {
+                "the request failed"
+            };
+            AppError::server_error(format!("Could not reach the OpenProject server: {reason}."))
+        })
+    }
+
+    /// Fetch a URL's raw bytes rather than a JSON body — attachment content,
+    /// which is the one response this client reads that is not JSON.
+    ///
+    /// The size cap is checked twice on purpose: against `Content-Length`
+    /// before anything is read, so an oversized file costs one round trip and
+    /// no memory, and against the collected length afterwards, because a
+    /// chunked response declares no length at all.
+    ///
+    /// Redirects are followed (OpenProject answers HTTP 302 to a presigned
+    /// storage URL when attachments live outside the database). reqwest drops
+    /// `Authorization` when a redirect changes host, scheme or port, so the key
+    /// reaches the instance and nothing else.
+    async fn request_bytes(&self, url: url::Url) -> Result<AttachmentContent, AppError> {
+        let request = self
+            .http
+            .request(Method::GET, url)
+            .header(reqwest::header::AUTHORIZATION, self.authorization_header());
+        let response = self.send(request).await?;
+
+        let status = response.status();
+        if !status.is_success() {
+            // The body of a failed content request is JSON, like every other
+            // error OpenProject returns.
+            let text = response.text().await.unwrap_or_default();
+            return Err(self.map_error_status(status, &text));
+        }
+
+        if let Some(length) = response.content_length() {
+            if length > MAX_ATTACHMENT_BYTES as u64 {
+                return Err(AppError::invalid_input(format!(
+                    "That attachment is larger than the {} MB this app will load.",
+                    MAX_ATTACHMENT_BYTES / (1024 * 1024)
+                )));
+            }
+        }
+
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_string);
+
+        let bytes = response.bytes().await.map_err(|_| {
+            AppError::server_error("The attachment could not be read from the server.")
+        })?;
+        if bytes.len() > MAX_ATTACHMENT_BYTES {
+            return Err(AppError::invalid_input(format!(
+                "That attachment is larger than the {} MB this app will load.",
+                MAX_ATTACHMENT_BYTES / (1024 * 1024)
+            )));
+        }
+
+        Ok(AttachmentContent {
+            bytes: bytes.to_vec(),
+            content_type,
+        })
+    }
+
+    /// POST a multipart body — the attachment upload, and the only request here
+    /// that does not send `Content-Type: application/json`. reqwest sets the
+    /// multipart content type with its own generated boundary, so this must not.
+    async fn request_multipart(
+        &self,
+        url: url::Url,
+        form: reqwest::multipart::Form,
+    ) -> Result<Value, AppError> {
+        let request = self
+            .http
+            .request(Method::POST, url)
+            .header(reqwest::header::AUTHORIZATION, self.authorization_header())
+            .header(reqwest::header::ACCEPT, "application/json")
+            .multipart(form);
+        let response = self.send(request).await?;
+
+        let status = response.status();
+        let text = response.text().await.unwrap_or_default();
+        if !status.is_success() {
+            return Err(self.map_error_status(status, &text));
+        }
+        if text.is_empty() {
+            return Ok(Value::Null);
+        }
+        serde_json::from_str(&text).map_err(|_| {
+            AppError::new(
+                "OPENPROJECT_SCHEMA_FAILED",
+                format!(
+                    "The OpenProject server returned a non-JSON response (HTTP {}).",
+                    status.as_u16()
+                ),
+            )
+        })
     }
 
     /// OpenProject API key auth: `Basic base64("apikey:<key>")` — the literal
@@ -719,12 +1026,97 @@ impl OpenProjectClient {
         }
     }
 
+    /// Parse a collection **element by element**, skipping any element that does
+    /// not match and logging which field it failed on.
+    ///
+    /// The strict `parse` fails the whole response on one bad element, and that
+    /// is the wrong trade for a list: one work package with an
+    /// instance-specific oddity would empty the entire picker and browse list,
+    /// with nothing on screen to say why. `schemas::common` already states the
+    /// rule this restores — "a single differently-serialized description" must
+    /// not fail "an entire collection" — and element-level strictness was
+    /// quietly breaking it.
+    ///
+    /// **Not** written in response to an observed failure. The one parse error
+    /// reported from a live instance looked like element drift and was actually
+    /// an empty 2xx body (see `parse`); this is the latent fragility that
+    /// investigation exposed, fixed on its own merits.
+    ///
+    /// Two things keep this from becoming a silent data-loss hatch:
+    ///
+    /// - **A wholesale break is still loud.** If the server sent elements and
+    ///   *none* of them parsed, the shape really has changed and this returns
+    ///   `OPENPROJECT_SCHEMA_FAILED` rather than an empty list.
+    /// - **`total` stays the server's.** Only `count` reflects what survived, so
+    ///   a caller comparing the two can still tell it is not seeing everything —
+    ///   which is what the browse list's "showing the first N" notice reads.
+    ///
+    /// Deliberately **not** used for time entries. A dropped work package costs
+    /// one row in a list; a dropped time entry makes a day's total silently
+    /// wrong, and a wrong number is worse than an error.
+    fn parse_collection<T: DeserializeOwned>(
+        &self,
+        body: Value,
+        context: &str,
+    ) -> Result<Collection<T>, AppError> {
+        let raw: Collection<Value> = self.parse(body, context)?;
+        let received = raw.embedded.elements.len();
+
+        let mut elements = Vec::with_capacity(received);
+        let mut skipped = 0usize;
+        for element in raw.embedded.elements {
+            match serde_json::from_value::<T>(element) {
+                Ok(parsed) => elements.push(parsed),
+                Err(error) => {
+                    skipped += 1;
+                    log_parse_failure(&format!("{context} (one element, skipped)"), &error);
+                }
+            }
+        }
+
+        // Everything failed, and there was something to fail: this is drift in
+        // the shape itself, not one odd row.
+        if received > 0 && elements.is_empty() {
+            return Err(AppError::schema_failed());
+        }
+        if skipped > 0 {
+            eprintln!(
+                "[openproject] {context}: skipped {skipped} of {received} elements that did not match the expected shape"
+            );
+        }
+
+        Ok(Collection {
+            type_name: raw.type_name,
+            total: raw.total,
+            count: elements.len() as i64,
+            embedded: crate::schemas::common::CollectionElements { elements },
+        })
+    }
+
     /// Parse a body into a declared shape.
     ///
     /// The webview-visible message stays generic; `log_parse_failure` records
     /// where the mismatch was so drift is diagnosable without that detail
     /// crossing the boundary.
     fn parse<T: DeserializeOwned>(&self, body: Value, context: &str) -> Result<T, AppError> {
+        // An empty 2xx body arrives here as `Value::Null` (see `request`).
+        //
+        // Rejected explicitly, before serde sees it, for two reasons. It
+        // otherwise produced "invalid type: null, expected struct Collection",
+        // which classifies as *"unexpected type or missing field"* — a server
+        // that sent nothing was reported as a schema mismatch, and the field it
+        // named did not exist. And the three call sites that parse into a bare
+        // `Value` would not have failed at all: `from_value::<Value>(Null)`
+        // succeeds, so an empty form response became zero allowed activities
+        // and an all-read-only form, with nothing anywhere saying why.
+        //
+        // A bodyless DELETE is unaffected — it discards the body and never
+        // reaches here.
+        if body.is_null() {
+            eprintln!("[openproject] {context}: the server answered 2xx with an empty body");
+            return Err(AppError::empty_response());
+        }
+
         serde_json::from_value(body).map_err(|error| {
             log_parse_failure(context, &error);
             AppError::schema_failed()
@@ -735,6 +1127,48 @@ impl OpenProjectClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_parse_failure_names_the_field_but_never_the_value() {
+        // An absent field is named, in backticks. *Which* one is serde's choice
+        // (the first it misses), so the assertion is that a name is there at
+        // all — that is what turns drift into a one-line fix.
+        let missing = serde_json::from_value::<WorkPackage>(json!({"id": 1}))
+            .expect_err("a work package needs more than an id");
+        let logged = redact_literals(&missing.to_string());
+        assert!(logged.contains("missing field"), "{logged}");
+        assert!(logged.contains('`'), "no field name in {logged:?}");
+
+        // A mismatched type embeds the offending value, and on this API that
+        // value is user-authored — a subject, a comment. It must not reach
+        // stderr, and the field path must survive anyway.
+        let wrong_type = serde_json::from_value::<WorkPackage>(json!({
+            "_type": "WorkPackage",
+            "id": 1,
+            "lockVersion": 0,
+            "subject": {"nested": "a confidential subject"},
+            "_links": {"self": {"href": "/api/v3/work_packages/1"}}
+        }))
+        .expect_err("a subject is not an object");
+        let logged = redact_literals(&wrong_type.to_string());
+        assert!(
+            !logged.contains("confidential"),
+            "value leaked into {logged:?}"
+        );
+        assert!(logged.contains("invalid type"), "{logged}");
+    }
+
+    #[test]
+    fn redaction_leaves_a_message_with_no_quoted_value_alone() {
+        assert_eq!(
+            redact_literals("missing field `lockVersion`"),
+            "missing field `lockVersion`"
+        );
+        assert_eq!(
+            redact_literals("invalid type: null, expected a string"),
+            "invalid type: null, expected a string"
+        );
+    }
 
     #[test]
     fn reads_the_top_level_message_out_of_an_error_body() {
@@ -854,18 +1288,153 @@ mod tests {
         );
     }
 
+    /// A work-package collection body with the given elements.
+    fn collection_body(elements: &str) -> Value {
+        serde_json::from_str(&format!(
+            r#"{{"_type":"WorkPackageCollection","total":9,"count":2,
+                 "_embedded":{{"elements":[{elements}]}}}}"#
+        ))
+        .expect("test body is valid JSON")
+    }
+
+    const GOOD_ELEMENT: &str = r#"{"id":1,"_type":"WorkPackage","lockVersion":0,
+        "subject":"fine","_links":{"self":{"href":"/api/v3/work_packages/1"}}}"#;
+
     #[test]
-    fn descriptions_are_absolutized_on_the_way_out() {
+    fn an_empty_2xx_body_is_reported_as_such_and_not_as_schema_drift() {
+        // The bug this closes: an empty body reaches the parser as `null`,
+        // serde says "invalid type: null, expected struct Collection", and that
+        // classifies as "unexpected type or missing field" — so a server that
+        // sent nothing was reported as a shape mismatch, naming a field that
+        // did not exist.
+        let error = client()
+            .parse::<WorkPackageCollection>(Value::Null, "list_work_packages")
+            .expect_err("null is not a collection");
+
+        assert_eq!(error.code, "OPENPROJECT_EMPTY_RESPONSE");
+        assert_ne!(error.code, "OPENPROJECT_SCHEMA_FAILED");
+        // The message names the likely cause, because both of them are worth
+        // retrying rather than investigating.
+        assert!(error.message.contains("try again"), "{}", error.message);
+    }
+
+    #[test]
+    fn an_empty_body_no_longer_slips_through_a_bare_value_parse() {
+        // `from_value::<Value>(Null)` *succeeds*, so the three form endpoints
+        // that parse into a bare `Value` did not fail at all — an empty
+        // response became zero allowed activities and an all-read-only form,
+        // with nothing anywhere saying why.
+        let error = client()
+            .parse::<Value>(Value::Null, "get_work_package_form")
+            .expect_err("an empty form response is a server problem");
+
+        assert_eq!(error.code, "OPENPROJECT_EMPTY_RESPONSE");
+    }
+
+    #[test]
+    fn an_empty_collection_body_is_not_confused_with_an_empty_list() {
+        // `{"count":0,…,"elements":[]}` is a real answer; no body at all is not.
+        let real_empty = collection_body("");
+        assert!(client()
+            .parse_collection::<WorkPackage>(real_empty, "list_work_packages")
+            .is_ok());
+
+        let no_body = client()
+            .parse_collection::<WorkPackage>(Value::Null, "list_work_packages")
+            .expect_err("no body");
+        assert_eq!(no_body.code, "OPENPROJECT_EMPTY_RESPONSE");
+    }
+
+    #[test]
+    fn a_genuine_shape_mismatch_is_still_reported_as_schema_drift() {
+        // The null check must not swallow the case it was mistaken for.
+        let wrong_shape: Value = serde_json::from_str(r#"{"unexpected":true}"#).unwrap();
+        let error = client()
+            .parse::<WorkPackageCollection>(wrong_shape, "list_work_packages")
+            .expect_err("not a collection");
+
+        assert_eq!(error.code, "OPENPROJECT_SCHEMA_FAILED");
+    }
+
+    #[test]
+    fn one_unparseable_work_package_does_not_empty_the_whole_list() {
+        // The bug this restores the codebase's own rule against: a single odd
+        // element used to fail the entire response, emptying the picker and the
+        // browse list with nothing on screen to explain it.
+        let body = collection_body(&format!(
+            r#"{GOOD_ELEMENT}, {{"id":2,"_type":"WorkPackage"}}"#
+        ));
+        let collection: WorkPackageCollection = client()
+            .parse_collection(body, "list_work_packages")
+            .expect("the good element survives");
+
+        assert_eq!(collection.elements().len(), 1);
+        assert_eq!(collection.elements()[0].subject, "fine");
+    }
+
+    #[test]
+    fn count_reports_what_survived_while_total_stays_the_servers() {
+        // `total` is how a caller can still tell it is not seeing everything —
+        // the browse list's "showing the first N" notice reads exactly this.
+        let body = collection_body(&format!(r#"{GOOD_ELEMENT}, {{"id":2}}"#));
+        let collection: WorkPackageCollection = client()
+            .parse_collection(body, "list_work_packages")
+            .expect("parses");
+
+        assert_eq!(collection.count, 1);
+        assert_eq!(collection.total, 9);
+    }
+
+    #[test]
+    fn a_wholesale_shape_change_is_still_an_error() {
+        // Tolerating one odd row must not turn real drift into a silently empty
+        // list.
+        let body = collection_body(r#"{"id":1}, {"id":2}"#);
+        let error = client()
+            .parse_collection::<WorkPackage>(body, "list_work_packages")
+            .expect_err("nothing parsed, so the shape itself changed");
+
+        assert_eq!(error.code, "OPENPROJECT_SCHEMA_FAILED");
+    }
+
+    #[test]
+    fn a_genuinely_empty_collection_is_not_an_error() {
+        let body = collection_body("");
+        let collection: WorkPackageCollection = client()
+            .parse_collection(body, "list_work_packages")
+            .expect("an empty list is a real answer");
+
+        assert_eq!(collection.count, 0);
+        assert!(collection.elements().is_empty());
+    }
+
+    #[test]
+    fn a_broken_envelope_is_still_rejected() {
+        // Element tolerance does not extend to the collection wrapper: without
+        // `_embedded` there is nothing to be tolerant about.
+        let body: Value = serde_json::from_str(r#"{"_type":"WorkPackageCollection"}"#).unwrap();
+        let error = client()
+            .parse_collection::<WorkPackage>(body, "list_work_packages")
+            .expect_err("no envelope");
+
+        assert_eq!(error.code, "OPENPROJECT_SCHEMA_FAILED");
+    }
+
+    #[test]
+    fn descriptions_are_proxified_on_the_way_out() {
         let mut work_package: WorkPackage = serde_json::from_str(
             r#"{"id":1,"_type":"WorkPackage","lockVersion":0,"subject":"x",
                 "description":{"format":"markdown","raw":"![a](/api/v3/attachments/9/content)"},
                 "_links":{"self":{"href":"/api/v3/work_packages/1"}}}"#,
         )
         .unwrap();
-        client().absolutize_description(&mut work_package);
+        client().proxify_description(&mut work_package);
         assert_eq!(
             work_package.description.raw(),
-            "![a](https://op.example.com/api/v3/attachments/9/content)"
+            format!(
+                "![a]({})",
+                crate::openproject::attachment_urls::attachment_proxy_url(9)
+            )
         );
     }
 
@@ -877,7 +1446,7 @@ mod tests {
                 "_links":{"self":{"href":"/api/v3/work_packages/1"}}}"#,
         )
         .unwrap();
-        client().absolutize_description(&mut work_package);
+        client().proxify_description(&mut work_package);
         assert_eq!(work_package.description.raw(), "");
     }
 }
