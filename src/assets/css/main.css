@@ -9,11 +9,12 @@
  * the CSP has no business allowing an external style and font host just for
  * typography; and a first paint should not wait on someone else's CDN.
  *
- * Three subsets of the variable font, not the family's ten. `vietnamese` is not
- * optional here — the instance this app talks to holds Vietnamese work package
- * subjects and comments, and without it every diacritic falls back to another
- * face mid-sentence. The seven remaining subsets (cherokee, syriac, nushu, …)
- * would be dead weight.
+ * These files are generated from the user-supplied
+ * `GoogleSansFlex-VariableFont_GRAD,ROND,opsz,slnt,wdth,wght.ttf`. The unused
+ * GRAD, ROND, slnt and wdth axes are pinned to their defaults, leaving the opsz
+ * and wght axes requested by the app. The result is split into latin, latin-ext
+ * and vietnamese subsets so the desktop bundle does not carry the 4 MB source
+ * font and browsers only load the glyph ranges a page needs.
  *
  * One variable file per subset covers every weight: `font-weight: 1 1000` is the
  * axis range, so no separate file per weight is fetched. `font-optical-sizing`
