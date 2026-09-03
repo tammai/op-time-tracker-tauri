@@ -22,12 +22,15 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "icons": "tauri icon build/icon.png",
+    "fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml",
+    "fmt:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
     "type-check": "vue-tsc --noEmit -p tsconfig.app.json && vue-tsc --noEmit -p tsconfig.test.json",
     "lint": "eslint .",
+    "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "check": "pnpm type-check && pnpm test && pnpm test:rust && cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings"
+    "check": "pnpm fmt:check && pnpm lint && pnpm type-check && pnpm test && pnpm test:rust && pnpm lint:rust"
   },
   "dependencies": {
     "@iconify/vue": "^5.0.1",
